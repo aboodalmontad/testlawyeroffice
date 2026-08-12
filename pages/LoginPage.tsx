@@ -21,6 +21,7 @@ import {
   ShareIcon,
   ClockIcon,
   DatabaseIcon,
+  TrashIcon,
 } from "../components/icons";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import {
@@ -28,6 +29,7 @@ import {
   normalize_mobile_to_e164,
 } from "../utils/mobileUtils";
 import { to_input_date_string } from "../utils/dateUtils";
+import { clear_app_cache } from "../utils/cacheUtils";
 import type { User } from "@supabase/supabase-js";
 
 interface auth_page_props {
@@ -899,6 +901,19 @@ const LoginPage: React.FC<auth_page_props> = ({
     }
   };
 
+  const handle_clear_cache = async () => {
+    if (
+      window.confirm(
+        "هل أنت تأكد من رغبتك في مسح كافة البيانات والكاش المحفوظ محلياً؟ سيتم إعادة تحميل الصفحة.",
+      )
+    ) {
+      set_loading(true);
+      set_message("جاري مسح الكاش والبيانات المحفوظة محلياً...");
+      await clear_app_cache();
+      window.location.reload();
+    }
+  };
+
   const handle_retry = () => {
     set_error(null);
     set_message(null);
@@ -977,14 +992,24 @@ const LoginPage: React.FC<auth_page_props> = ({
                   <CheckCircleIcon className="w-4 h-4" />
                   التطبيق محدث لآخر إصدار
                 </div>
-                <button
-                  onClick={handle_hard_refresh}
-                  className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-full transition-all active:scale-95 cursor-pointer mt-1"
-                  title="مسح الكاش وتحديث الملفات فورياً دون حذف البيانات"
-                >
-                  <ArrowPathIcon className="w-3.5 h-3.5 animate-spin-reverse hover:animate-spin" />
-                  تحديث إجباري (مسح الذاكرة المؤقتة فقط)
-                </button>
+                <div className="flex items-center justify-center gap-2 flex-wrap mt-1">
+                  <button
+                    onClick={handle_hard_refresh}
+                    className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-full transition-all active:scale-95 cursor-pointer"
+                    title="مسح الكاش وتحديث الملفات فورياً دون حذف البيانات"
+                  >
+                    <ArrowPathIcon className="w-3.5 h-3.5 animate-spin-reverse hover:animate-spin" />
+                    تحديث إجباري (مسح الذاكرة)
+                  </button>
+                  <button
+                    onClick={handle_clear_cache}
+                    className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-full transition-all active:scale-95 cursor-pointer"
+                    title="مسح كافة البيانات والكاش المحفوظ محلياً وتصفير التخزين"
+                  >
+                    <TrashIcon className="w-3.5 h-3.5" />
+                    مسح الكاش بالكامل
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1358,6 +1383,17 @@ const LoginPage: React.FC<auth_page_props> = ({
               </a>
             </p>
           )}
+          <div className="mt-6 pt-4 border-t border-gray-100 flex justify-center">
+            <button
+              type="button"
+              onClick={handle_clear_cache}
+              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-red-600 transition-colors py-1 px-2.5 rounded-md hover:bg-red-50"
+              title="مسح التخزين المحلي والذاكرة المؤقتة بالكامل"
+            >
+              <TrashIcon className="w-3.5 h-3.5" />
+              مسح الكاش والبيانات المحلية
+            </button>
+          </div>
         </div>
 
         <div className="mt-8 text-center">

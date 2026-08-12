@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { PowerIcon, CheckCircleIcon } from '../components/icons';
-import { getSupabaseClient } from '../supabaseClient';
+import { get_supabase_client } from '../supabaseClient';
 import { useData } from '../context/DataContext';
 
 interface VerificationPageProps {
@@ -12,8 +12,8 @@ const VerificationPage: React.FC<VerificationPageProps> = ({ onLogout }) => {
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
     const [success, setSuccess] = React.useState(false);
-    const { fetchAndRefresh } = useData();
-    const supabase = getSupabaseClient();
+    const { manual_sync } = useData();
+    const supabase = get_supabase_client();
 
     const handleVerify = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -32,7 +32,7 @@ const VerificationPage: React.FC<VerificationPageProps> = ({ onLogout }) => {
             if (data === true) {
                 setSuccess(true);
                 // Force a data refresh to update the profile state in the app
-                await fetchAndRefresh();
+                await manual_sync({ force: true });
                 // Reload the page to ensure the main App component re-renders with authorized view
                 setTimeout(() => window.location.reload(), 1500);
             } else {
