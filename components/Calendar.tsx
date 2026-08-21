@@ -64,9 +64,11 @@ const Calendar: React.FC<CalendarProps> = ({
   const getEventsCountForDay = (day: Date) => {
     const daySessions = sessions.filter((s) => is_same_day(s.date, day));
     const isPast = is_before_today(day);
+    const isCurrentDay = is_today(day);
 
     let postponedCount = 0; // أخضر - جلسات مرحلة
-    let unpostponedCount = 0; // برتقالي - جلسات غير مرحلة (فائتة ولم ترحل)
+    let unpostponedCount = 0; // برتقالي داكن - جلسات غير مرحلة (فائتة)
+    let todayCount = 0; // برتقالي فاتح - جلسات اليوم
     let futureCount = 0; // أزرق - جلسات قادمة
 
     daySessions.forEach((s) => {
@@ -77,20 +79,26 @@ const Calendar: React.FC<CalendarProps> = ({
         postponedCount++;
       } else if (isPast) {
         unpostponedCount++;
+      } else if (isCurrentDay) {
+        todayCount++;
       } else {
         futureCount++;
       }
     });
 
-    const appointmentCount = appointments.filter((a) =>
+    const dayAppointments = appointments.filter((a) =>
       is_same_day(a.date, day)
-    ).length;
+    );
+    const appointmentCount = dayAppointments.length;
+    const completedAppointmentCount = dayAppointments.filter((a) => a.completed).length;
 
     return {
       postponedCount,
       unpostponedCount,
+      todayCount,
       futureCount,
       appointmentCount,
+      completedAppointmentCount,
     };
   };
 
@@ -128,8 +136,10 @@ const Calendar: React.FC<CalendarProps> = ({
           const {
             postponedCount,
             unpostponedCount,
+            todayCount,
             futureCount,
             appointmentCount,
+            completedAppointmentCount,
           } = getEventsCountForDay(day);
           const isSelected = is_same_day(day, selectedDate);
           const isCurrentDay = is_today(day);
@@ -147,7 +157,7 @@ const Calendar: React.FC<CalendarProps> = ({
               " bg-red-500 text-white font-bold shadow-sm hover:bg-red-600";
           } else if (isCurrentDay) {
             dayClasses +=
-              " bg-blue-50 text-blue-700 font-bold ring-1 ring-blue-200";
+              " bg-orange-100/90 text-orange-900 font-bold ring-2 ring-orange-400/80 hover:bg-orange-200/90";
           } else if (isWknd) {
             dayClasses +=
               " bg-pink-100/70 text-pink-800 hover:bg-pink-200/70";
@@ -174,10 +184,18 @@ const Calendar: React.FC<CalendarProps> = ({
                 )}
                 {unpostponedCount > 0 && (
                   <span
-                    className="flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-[10px] font-bold text-white bg-orange-500 rounded-full shadow-sm"
+                    className="flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-[10px] font-bold text-white bg-orange-600 rounded-full shadow-sm"
                     title={`${numberFormatter.format(unpostponedCount)} جلسات غير مرحلة`}
                   >
                     {numberFormatter.format(unpostponedCount)}
+                  </span>
+                )}
+                {todayCount > 0 && (
+                  <span
+                    className="flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-[10px] font-bold text-white bg-orange-400 rounded-full shadow-sm"
+                    title={`${numberFormatter.format(todayCount)} جلسات اليوم`}
+                  >
+                    {numberFormatter.format(todayCount)}
                   </span>
                 )}
                 {futureCount > 0 && (
@@ -190,10 +208,28 @@ const Calendar: React.FC<CalendarProps> = ({
                 )}
                 {appointmentCount > 0 && (
                   <span
-                    className="flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-[10px] font-bold text-white bg-purple-500 rounded-full shadow-sm"
-                    title={`${numberFormatter.format(appointmentCount)} مواعيد`}
+                    className={`flex items-center justify-center min-w-[1.25rem] h-5 px-1 gap-0.5 text-[10px] font-bold text-white ${
+                      completedAppointmentCount === appointmentCount ? 'bg-purple-600' : 'bg-purple-500'
+                    } rounded-full shadow-sm`}
+                    title={`${numberFormatter.format(appointmentCount)} مواعيد${
+                      completedAppointmentCount > 0 ? ` (${numberFormatter.format(completedAppointmentCount)} منجزة)` : ""
+                    }`}
                   >
-                    {numberFormatter.format(appointmentCount)}
+                    <span>{numberFormatter.format(appointmentCount)}</span>
+                    {completedAppointmentCount > 0 && (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="w-2.5 h-2.5 text-white"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M19.916 4.626a.75.75 0 01.208 1.04l-9 13.5a.75.75 0 01-1.154.114l-6-6a.75.75 0 011.06-1.06l5.353 5.353 8.493-12.739a.75.75 0 011.04-.208z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    )}
                   </span>
                 )}
               </div>

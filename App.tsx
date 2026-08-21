@@ -38,6 +38,7 @@ import {
   format_time,
   is_same_day,
   is_before_today,
+  to_input_date_string,
 } from "./utils/dateUtils";
 import { printElement } from "./utils/printUtils";
 import SyncStatusIndicator from "./components/SyncStatusIndicator";
@@ -407,7 +408,7 @@ const App: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
                                       .map(
                                         (loc) => `
                                         <div class="location-group">
-                                            <div class="location-title">${loc}</div>
+                                            <div class="location-title" style="${grouped_pending[loc].some((t) => t.importance === "urgent") ? "background-color: #fee2e2; color: #991b1b; border-right: 4px solid #ef4444;" : ""}">${loc}${grouped_pending[loc].some((t) => t.importance === "urgent") ? ' <span style="font-size:0.8em; font-weight:normal; color:#b91c1c;">(⚠️ عاجل)</span>' : ""}</div>
                                             ${grouped_pending[loc]
                                               .map(
                                                 (t) => `
@@ -457,6 +458,18 @@ const App: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
         user.email === "nahwiabdo@gmail.com" ||
         user.email === "avocat.nahwi@gmail.com" ||
         user.email === "sy963958932922@email.com";
+      const now = new Date();
+      const fortyFiveDaysLater = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 45
+      );
+      const oneYearLater = new Date(
+        now.getFullYear() + 1,
+        now.getMonth(),
+        now.getDate()
+      );
+
       const newProfile = {
         id: user.id,
         full_name: user.user_metadata?.full_name || "مستخدم جديد",
@@ -465,12 +478,11 @@ const App: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
         is_approved: is_admin,
         is_active: true,
         mobile_verified: is_admin,
-        subscription_start_date: new Date().toISOString(),
-        subscription_end_date: new Date(
-          new Date().getFullYear() + 1,
-          new Date().getMonth(),
-          new Date().getDate(),
-        ).toISOString(),
+        trial_used: !is_admin,
+        subscription_start_date: to_input_date_string(now),
+        subscription_end_date: is_admin
+          ? to_input_date_string(oneYearLater)
+          : to_input_date_string(fortyFiveDaysLater),
       };
 
       const { error } = await supabase.from("profiles").upsert([newProfile]);
@@ -504,8 +516,26 @@ const App: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
     }
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, newSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       console.log("Auth state changed:", event, newSession?.user?.id);
+      
+      if (event === "SIGNED_IN" && newSession?.user?.id) {
+        const sessionKey = "session_login_logged_" + newSession.user.id;
+        if (!sessionStorage.getItem(sessionKey)) {
+          sessionStorage.setItem(sessionKey, "true");
+          import("./utils/auditLogger").then(({ logActivity }) => {
+            logActivity(
+              newSession.user.id,
+              "LOGIN",
+              "auth",
+              newSession.user.id,
+              "تسجيل دخول للنظام",
+              newSession.user.user_metadata?.full_name || newSession.user.email || ""
+            );
+          });
+        }
+      }
+
       if (newSession) {
         setSession(newSession);
         localStorage.setItem(
@@ -602,6 +632,7 @@ const App: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
     profile?.full_name || session?.user.user_metadata?.full_name || "مستخدم";
 
   const handleLogout = async () => {
+    sessionStorage.clear();
     localStorage.removeItem("lawyerAppLastUser");
     setSession(null);
     if (supabase) await supabase.auth.signOut();

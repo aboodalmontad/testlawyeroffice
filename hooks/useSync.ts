@@ -149,6 +149,7 @@ const construct_data = (flat_data: Partial<FlatData>): AppData => {
     documents: (flat_data.case_documents || []) as any,
     profiles: (flat_data.profiles || []) as any,
     site_finances: (flat_data.site_finances || []) as any,
+    audit_logs: (flat_data.audit_logs || []) as any,
   };
 };
 
@@ -435,6 +436,7 @@ export const use_sync = ({
       case_documents: data.documents,
       profiles: data.profiles,
       site_finances: data.site_finances,
+      audit_logs: data.audit_logs || [],
       sync_deletions: [], // Local data doesn't track deletions this way
     };
   };
@@ -456,9 +458,18 @@ export const use_sync = ({
       if (sync_status_ref.current === "syncing") return;
       if (is_auth_loading) return;
 
-      // Optimization: Skip sync if no local changes and already synced, unless forced
+      const has_pending_deletions = Object.values(
+        deleted_ids_ref.current || {},
+      ).some((arr: any) => Array.isArray(arr) && arr.length > 0);
+      const has_pending_docs = (
+        local_data_ref.current?.documents || []
+      ).some((d) => d.local_state === "pending_upload");
+
+      // Optimization: Skip sync only if no local changes, no pending deletions, no pending docs, and already synced, unless forced
       if (
         !is_dirty_ref.current &&
+        !has_pending_deletions &&
+        !has_pending_docs &&
         sync_status_ref.current === "synced" &&
         !options?.force
       ) {

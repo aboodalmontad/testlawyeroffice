@@ -88,6 +88,7 @@ export interface Profile {
   is_approved: boolean;
   is_active: boolean;
   mobile_verified?: boolean;
+  trial_used?: boolean;
   subscription_start_date: string | null;
   subscription_end_date: string | null;
   role: "user" | "admin";
@@ -270,6 +271,18 @@ export interface CaseDocument {
   updated_at?: string;
 }
 
+export interface AuditLogEntry {
+  id: string | number;
+  office_id?: string;
+  user_id: string;
+  user_name?: string;
+  action: string;
+  entity_type: string;
+  entity_id?: string;
+  details: string;
+  created_at: string;
+}
+
 export interface AppData {
   clients: Client[];
   admin_tasks: AdminTask[];
@@ -280,6 +293,7 @@ export interface AppData {
   documents: CaseDocument[];
   profiles: Profile[];
   site_finances: SiteFinancialEntry[];
+  audit_logs: AuditLogEntry[];
 }
 
 export interface DeletedIds {

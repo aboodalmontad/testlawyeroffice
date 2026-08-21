@@ -1,4 +1,5 @@
 import * as React from "react";
+import { logActivity } from "../utils/auditLogger";
 import {
   Client,
   Session,
@@ -17,6 +18,7 @@ import {
   SiteFinancialEntry,
   Permissions,
   default_permissions,
+  AuditLogEntry,
 } from "../types";
 import { useOnlineStatus } from "./useOnlineStatus";
 import type { User } from "@supabase/supabase-js";
@@ -31,6 +33,7 @@ import {
   to_input_date_string,
   is_holiday,
   safe_revive_date,
+  is_today,
 } from "../utils/dateUtils";
 import { generateId } from "../utils/idUtils";
 import { RealtimeAlert } from "../components/RealtimeNotifier";
@@ -59,6 +62,7 @@ const get_initial_data = (): AppData => ({
   documents: [],
   profiles: [],
   site_finances: [],
+  audit_logs: [],
 });
 
 const migrate_data = (old_data: any): AppData => {
@@ -240,6 +244,7 @@ const migrate_data = (old_data: any): AppData => {
     is_approved: Boolean(p.is_approved ?? p.isApproved),
     is_active: Boolean(p.is_active ?? p.isActive),
     mobile_verified: Boolean(p.mobile_verified ?? p.mobileVerified),
+    trial_used: Boolean(p.trial_used ?? p.trialUsed),
     subscription_start_date:
       p.subscription_start_date || p.subscriptionStartDate,
     subscription_end_date: p.subscription_end_date || p.subscriptionEndDate,
@@ -289,6 +294,7 @@ const migrate_data = (old_data: any): AppData => {
     documents: (old_data.documents || []).map(migrate_document),
     profiles: (old_data.profiles || []).map(migrate_profile),
     site_finances: (old_data.site_finances || []).map(migrate_site_finance),
+    audit_logs: old_data.audit_logs || [],
   };
 };
 
@@ -477,28 +483,29 @@ export const useSupabaseData = (
         (f) => f.user_id === target_user_id,
       ),
       assistants: data.assistants.filter((a: any) => {
-        // If they are strings, assume they are the default system dropdown items
+        // If it's a string, only keep default system dropdown item
         if (typeof a === "string") {
-          return true; // default_assistants
+          return a === "بدون تخصيص";
         }
         // If assistants are objects with user_id, explicitly filter them.
         if (typeof a === "object" && a !== null && "user_id" in a) {
           if (is_admin && !admin_viewing_user_id) {
-            // If admin is NOT viewing a specific user, they should only see their own assistants or system ones
-            // Otherwise the dropdown becomes a massive mess of all assistants across the app
-            return a.user_id === user?.id; 
+            return a.user_id === user?.id;
           }
           return a.user_id === target_user_id;
         }
-        // If it's some other weird object without user_id, keep it just in case
-        return true;
+        return false;
       }),
     };
   }, [data, is_admin, admin_viewing_user_id, user?.id]);
 
+  const current_user_profile: Profile | null = React.useMemo(() => {
+    if (!user) return null;
+    return data.profiles.find((p) => p.id === user.id) || null;
+  }, [user, data.profiles]);
+
   const current_user_permissions: Permissions = React.useMemo(() => {
     if (!user) return default_permissions;
-    const current_user_profile = data.profiles.find((p) => p.id === user.id);
     if (current_user_profile?.lawyer_id) {
       const perms = current_user_profile.permissions;
       if (perms && typeof perms === "object") {
@@ -619,6 +626,54 @@ export const useSupabaseData = (
     load_local_data();
   }, [user?.id, is_online, is_auth_loading, admin_viewing_user_id]);
 
+  const [is_auto_sync_enabled, set_auto_sync_enabled_state] = React.useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("is_auto_sync_enabled");
+      if (saved !== null) return JSON.parse(saved);
+    } catch (e) {}
+    return true;
+  });
+
+  const [is_auto_backup_enabled, set_auto_backup_enabled_state] = React.useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("is_auto_backup_enabled");
+      if (saved !== null) return JSON.parse(saved);
+    } catch (e) {}
+    return false;
+  });
+
+  const [admin_tasks_layout, set_admin_tasks_layout_state] = React.useState<
+    "horizontal" | "vertical"
+  >(() => {
+    try {
+      const saved = localStorage.getItem("admin_tasks_layout");
+      if (saved === "horizontal" || saved === "vertical") return saved;
+    } catch (e) {}
+    return "vertical";
+  });
+
+  // Load user specific settings when user changes
+  React.useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const syncKey = `is_auto_sync_enabled_${user.id}`;
+      const syncSaved = localStorage.getItem(syncKey);
+      if (syncSaved !== null) set_auto_sync_enabled_state(JSON.parse(syncSaved));
+
+      const backupKey = `is_auto_backup_enabled_${user.id}`;
+      const backupSaved = localStorage.getItem(backupKey);
+      if (backupSaved !== null) set_auto_backup_enabled_state(JSON.parse(backupSaved));
+
+      const layoutKey = `admin_tasks_layout_${user.id}`;
+      const layoutSaved = localStorage.getItem(layoutKey);
+      if (layoutSaved === "horizontal" || layoutSaved === "vertical") {
+        set_admin_tasks_layout_state(layoutSaved as "horizontal" | "vertical");
+      }
+    } catch (e) {
+      console.error("Error loading user settings from localStorage:", e);
+    }
+  }, [user?.id]);
+
   const { manual_sync: manual_sync, fetch_and_refresh: fetch_and_refresh } =
     use_sync({
       user: user,
@@ -693,34 +748,7 @@ export const useSupabaseData = (
       is_dirty: is_dirty,
     });
 
-  // Auto-sync on mount/login
-  React.useEffect(() => {
-    if (user && is_online && !is_auth_loading) {
-      // If we are already synced, we might have set it forcefully to bypass the loader.
-      // So let's run a quiet background manual_sync once to pull any updates.
-      console.log("Triggering background auto-sync in 500ms...");
-      const timer = setTimeout(() => {
-        manual_sync();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [user?.id, is_online, is_auth_loading]); // removed sync_status from deps so it fires once on mount
 
-  // Auto-sync when coming back online
-  const prev_is_online = React.useRef(is_online);
-  React.useEffect(() => {
-    if (
-      user &&
-      is_online &&
-      !prev_is_online.current &&
-      !is_auth_loading &&
-      sync_status !== "syncing"
-    ) {
-      console.log("Came back online, triggering auto-sync...");
-      manual_sync();
-    }
-    prev_is_online.current = is_online;
-  }, [is_online, manual_sync, user, is_auth_loading, sync_status]); // Trigger when is_online changes from false to true
 
   // Realtime Subscription for all data tables (Immediate sync across users)
   React.useEffect(() => {
@@ -809,54 +837,6 @@ export const useSupabaseData = (
     effective_user_id,
     fetch_and_refresh,
   ]);
-
-  const [is_auto_sync_enabled, set_auto_sync_enabled_state] = React.useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem("is_auto_sync_enabled");
-      if (saved !== null) return JSON.parse(saved);
-    } catch (e) {}
-    return true;
-  });
-
-  const [is_auto_backup_enabled, set_auto_backup_enabled_state] = React.useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem("is_auto_backup_enabled");
-      if (saved !== null) return JSON.parse(saved);
-    } catch (e) {}
-    return false;
-  });
-
-  const [admin_tasks_layout, set_admin_tasks_layout_state] = React.useState<
-    "horizontal" | "vertical"
-  >(() => {
-    try {
-      const saved = localStorage.getItem("admin_tasks_layout");
-      if (saved === "horizontal" || saved === "vertical") return saved;
-    } catch (e) {}
-    return "vertical";
-  });
-
-  // Load user specific settings when user changes
-  React.useEffect(() => {
-    if (!user?.id) return;
-    try {
-      const syncKey = `is_auto_sync_enabled_${user.id}`;
-      const syncSaved = localStorage.getItem(syncKey);
-      if (syncSaved !== null) set_auto_sync_enabled_state(JSON.parse(syncSaved));
-
-      const backupKey = `is_auto_backup_enabled_${user.id}`;
-      const backupSaved = localStorage.getItem(backupKey);
-      if (backupSaved !== null) set_auto_backup_enabled_state(JSON.parse(backupSaved));
-
-      const layoutKey = `admin_tasks_layout_${user.id}`;
-      const layoutSaved = localStorage.getItem(layoutKey);
-      if (layoutSaved === "horizontal" || layoutSaved === "vertical") {
-        set_admin_tasks_layout_state(layoutSaved as "horizontal" | "vertical");
-      }
-    } catch (e) {
-      console.error("Error loading user settings from localStorage:", e);
-    }
-  }, [user?.id]);
 
   const set_auto_sync_enabled = React.useCallback(
     (enabled: boolean) => {
@@ -998,9 +978,9 @@ export const useSupabaseData = (
       sync_status !== "syncing"
     ) {
       const timer = setTimeout(() => {
-        console.log("Auto-syncing local changes to cloud...");
+        console.log("Auto-syncing local changes to cloud in background...");
         manual_sync();
-      }, 2000); // Wait 2 seconds of inactivity before auto-syncing local changes
+      }, 300); // Fast background sync upon any modification (300ms debounce)
       return () => clearTimeout(timer);
     }
   }, [
@@ -1048,6 +1028,169 @@ export const useSupabaseData = (
       (s) => !s.is_postponed && !s.stage_decision_date && !s.next_session_date,
     );
   }, [all_sessions]);
+
+  // Alert for unpostponed today's sessions after 12:00 PM
+  const unpostponed_alert_tracker = React.useRef<{
+    date: string;
+    count: number;
+  }>({ date: "", count: 0 });
+
+  React.useEffect(() => {
+    const check_unpostponed_today_sessions = () => {
+      const now = new Date();
+      // Only check if time is past 12:00 PM (noon)
+      if (now.getHours() < 12) return;
+
+      const today_str = to_input_date_string(now);
+      const todays_unpostponed = unpostponed_sessions.filter((s) =>
+        is_today(s.date),
+      );
+      const count = todays_unpostponed.length;
+
+      if (count === 0) {
+        // If all today's sessions have been postponed/decided, clear any active alert
+        set_realtime_alerts((prev) =>
+          prev.filter((a) => a.type !== "unpostponed"),
+        );
+        return;
+      }
+
+      // If we haven't already alerted for today's date and count
+      if (
+        unpostponed_alert_tracker.current.date !== today_str ||
+        unpostponed_alert_tracker.current.count !== count
+      ) {
+        unpostponed_alert_tracker.current = { date: today_str, count };
+
+        const session_text =
+          count === 1
+            ? "جلسة واحدة اليوم لم ترحّل"
+            : count === 2
+            ? "جلسان اليوم لم ترحّلا"
+            : count >= 3 && count <= 10
+            ? `${count} جلسات اليوم لم ترحّل`
+            : `${count} جلسة اليوم لم ترحّل`;
+
+        set_realtime_alerts((prev) => [
+          ...prev.filter((a) => a.type !== "unpostponed"),
+          {
+            id: Date.now(),
+            message: `تنبيه بعد 12:00 ظهراً: يوجد ${session_text} بعد إلى جلسة قادمة.`,
+            type: "unpostponed",
+          },
+        ]);
+      }
+    };
+
+    check_unpostponed_today_sessions();
+
+    // Check periodically every minute
+    const intervalId = setInterval(check_unpostponed_today_sessions, 60000);
+    return () => clearInterval(intervalId);
+  }, [unpostponed_sessions]);
+
+  // Check for appointment reminders and trigger alerts
+  React.useEffect(() => {
+    const check_appointment_reminders = () => {
+      const appointmentsList = data.appointments;
+      if (!appointmentsList || appointmentsList.length === 0) return;
+
+      const now = new Date();
+      const nowMs = now.getTime();
+      const newAlerts: Appointment[] = [];
+      const notifiedApptIds: string[] = [];
+
+      appointmentsList.forEach((apt) => {
+        if (apt.completed || apt.notified) return;
+        if (!apt.date || !apt.time) return;
+
+        const datePart = apt.date.includes("T")
+          ? apt.date.split("T")[0]
+          : apt.date;
+        const dateTokens = datePart.split("-");
+        const timeTokens = apt.time.split(":");
+
+        if (dateTokens.length < 3 || timeTokens.length < 2) return;
+
+        const year = parseInt(dateTokens[0], 10);
+        const month = parseInt(dateTokens[1], 10);
+        const day = parseInt(dateTokens[2], 10);
+        const hour = parseInt(timeTokens[0], 10);
+        const minute = parseInt(timeTokens[1], 10);
+
+        if (
+          isNaN(year) ||
+          isNaN(month) ||
+          isNaN(day) ||
+          isNaN(hour) ||
+          isNaN(minute)
+        )
+          return;
+
+        const aptDate = new Date(year, month - 1, day, hour, minute, 0, 0);
+        const aptMs = aptDate.getTime();
+
+        const reminderMins =
+          typeof apt.reminder_time_in_minutes === "number"
+            ? apt.reminder_time_in_minutes
+            : 15;
+        const reminderMs = aptMs - reminderMins * 60 * 1000;
+
+        // Trigger if current time has reached/passed the reminder time,
+        // AND not passed appointment time by more than 3 hours.
+        if (nowMs >= reminderMs && nowMs <= aptMs + 3 * 60 * 60 * 1000) {
+          newAlerts.push(apt);
+          notifiedApptIds.push(apt.id);
+        }
+      });
+
+      if (newAlerts.length > 0) {
+        set_triggered_alerts((prev) => {
+          const existingIds = new Set(prev.map((a) => a.id));
+          const filteredNew = newAlerts.filter((a) => !existingIds.has(a.id));
+          if (filteredNew.length === 0) return prev;
+          return [...prev, ...filteredNew];
+        });
+
+        set_data((prev) => {
+          const updatedApps = prev.appointments.map((a) =>
+            notifiedApptIds.includes(a.id)
+              ? {
+                  ...a,
+                  notified: true,
+                  updated_at: new Date().toISOString(),
+                }
+              : a,
+          );
+          return { ...prev, appointments: updatedApps };
+        });
+
+        // Browser Native Push Notification fallback
+        if (typeof window !== "undefined" && "Notification" in window) {
+          if (Notification.permission === "granted") {
+            newAlerts.forEach((a) => {
+              try {
+                new Notification("⏰ تذكير بموعد: " + a.title, {
+                  body: `الموعد الساعة ${a.time} - المسند إليه: ${
+                    a.assignee || "غير محدد"
+                  }`,
+                  icon: "/favicon.ico",
+                  dir: "rtl",
+                  lang: "ar",
+                });
+              } catch (e) {
+                console.error("Browser notification error:", e);
+              }
+            });
+          }
+        }
+      }
+    };
+
+    check_appointment_reminders();
+    const intervalId = setInterval(check_appointment_reminders, 10000); // Check every 10 seconds
+    return () => clearInterval(intervalId);
+  }, [data.appointments]);
 
   const download_document_file = React.useCallback(
     async (doc: CaseDocument) => {
@@ -1335,6 +1478,7 @@ export const useSupabaseData = (
     set_admin_tasks_layout: set_admin_tasks_layout,
     location_order: location_order,
     set_location_order: set_location_order,
+    current_user_profile: current_user_profile,
     set_full_data: set_full_data,
     fetch_and_refresh: fetch_and_refresh,
     triggered_alerts: triggered_alerts,
@@ -1357,6 +1501,11 @@ export const useSupabaseData = (
         const updated_clients = next_clients.map((c: any) => {
           const prev_c = prev.clients.find((pc) => pc.id === c.id);
           if (!prev_c || JSON.stringify(prev_c) !== JSON.stringify(c)) {
+            if (user?.id) {
+              const action = !prev_c ? "CREATE" : "UPDATE";
+              const details = !prev_c ? `إضافة موكل: ${c.name}` : `تعديل بيانات موكل: ${c.name}`;
+              logActivity(user.id, action, "client", c.id, details);
+            }
             return { ...c, updated_at: now };
           }
           return c;
@@ -1372,6 +1521,11 @@ export const useSupabaseData = (
         const updated_tasks = next_tasks.map((t: any) => {
           const prev_t = prev.admin_tasks.find((pt) => pt.id === t.id);
           if (!prev_t || JSON.stringify(prev_t) !== JSON.stringify(t)) {
+            if (user?.id) {
+              const action = !prev_t ? "CREATE" : "UPDATE";
+              const details = !prev_t ? `إضافة مهمة: ${t.task}` : `تعديل مهمة: ${t.task}`;
+              logActivity(user.id, action, "admin_task", t.id, details);
+            }
             return { ...t, updated_at: now };
           }
           return t;
@@ -1389,6 +1543,11 @@ export const useSupabaseData = (
         const updated_apps = next_apps.map((a: any) => {
           const prev_a = prev.appointments.find((pa) => pa.id === a.id);
           if (!prev_a || JSON.stringify(prev_a) !== JSON.stringify(a)) {
+            if (user?.id) {
+              const action = !prev_a ? "CREATE" : "UPDATE";
+              const details = !prev_a ? `إضافة موعد: ${a.title}` : `تعديل موعد: ${a.title}`;
+              logActivity(user.id, action, "appointment", a.id, details);
+            }
             return { ...a, updated_at: now };
           }
           return a;
@@ -1635,5 +1794,35 @@ export const useSupabaseData = (
     download_document_file,
     get_document_file,
     postpone_session,
+    audit_logs: data.audit_logs || [],
+    log_activity: async (action: string, entity_type: string, entity_id?: string, details?: string) => {
+      const new_log: AuditLogEntry = {
+        id: Math.random().toString(36).substring(2, 9),
+        user_id: user?.id || "",
+        action,
+        entity_type,
+        entity_id,
+        details: details || "",
+        created_at: new Date().toISOString(),
+      };
+      set_full_data((prev) => ({
+        ...prev,
+        audit_logs: [new_log, ...(prev.audit_logs || [])].slice(0, 200),
+      }));
+      try {
+        const supabase = get_supabase_client();
+        if (supabase) {
+          await supabase.from("audit_logs").insert([{
+            user_id: user?.id || null,
+            action,
+            entity_type,
+            entity_id: entity_id || null,
+            details: details || "",
+          }]);
+        }
+      } catch (err) {
+        // Table might not exist yet
+      }
+    },
   };
 };

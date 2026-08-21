@@ -10,6 +10,7 @@ import {
   Profile,
   SiteFinancialEntry,
   SyncDeletion,
+  AuditLogEntry,
 } from "../types";
 import type { User } from "@supabase/supabase-js";
 import { safe_revive_date, to_input_date_string } from "../utils/dateUtils";
@@ -28,6 +29,7 @@ export type FlatData = {
   case_documents: CaseDocument[];
   profiles: Profile[];
   site_finances: SiteFinancialEntry[];
+  audit_logs: AuditLogEntry[];
   sync_deletions: SyncDeletion[];
 };
 
@@ -720,6 +722,7 @@ export const upsert_data_to_supabase = async (
       is_approved: profile.is_approved,
       is_active: profile.is_active,
       mobile_verified: profile.mobile_verified,
+      trial_used: profile.trial_used,
       subscription_start_date: profile.subscription_start_date,
       subscription_end_date: profile.subscription_end_date,
       role:
