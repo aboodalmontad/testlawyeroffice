@@ -11,6 +11,7 @@ import {
   ArrowUpTrayIcon,
   ShieldCheckIcon,
   UserGroupIcon,
+  PencilIcon,
 } from "../components/icons";
 import { Client, AdminTask, Appointment, AccountingEntry } from "../types";
 import { useData } from "../context/DataContext";
@@ -21,11 +22,12 @@ import {
   DOCS_METADATA_STORE_NAME,
 } from "../utils/db";
 import AssistantsManager from "../components/AssistantsManager";
-import ActivityLogsModal from "../components/ActivityLogsModal";
 
-interface SettingsPageProps {}
+interface SettingsPageProps {
+  onNavigate?: (page: string) => void;
+}
 
-const SettingsPage: React.FC<SettingsPageProps> = () => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   const {
     set_full_data,
     assistants,
@@ -46,7 +48,6 @@ const SettingsPage: React.FC<SettingsPageProps> = () => {
     message: string;
     type: "success" | "error";
   } | null>(null);
-  const [showActivityLogs, setShowActivityLogs] = React.useState(false);
   const [is_confirm_modal_open, set_is_confirm_modal_open] =
     React.useState(false);
   const [is_delete_assistant_modal_open, set_is_delete_assistant_modal_open] =
@@ -58,6 +59,8 @@ const SettingsPage: React.FC<SettingsPageProps> = () => {
   const [db_stats, set_db_stats] = React.useState<string | null>(null);
   const [is_assistants_manager_open, set_is_assistants_manager_open] =
     React.useState(false);
+  const [editing_assistant_name, set_editing_assistant_name] = React.useState<string | null>(null);
+  const [edited_assistant_name, set_edited_assistant_name] = React.useState<string>("");
   const [whatsappPreference, setWhatsappPreference] = React.useState<string | null>(() => {
     return localStorage.getItem("whatsapp_version_choice");
   });
@@ -144,6 +147,27 @@ const SettingsPage: React.FC<SettingsPageProps> = () => {
       set_assistant_to_delete(name);
       set_is_delete_assistant_modal_open(true);
     }
+  };
+  const handle_save_assistant_name = (oldName: string) => {
+    const newName = edited_assistant_name.trim();
+    if (!newName || newName === oldName) {
+      set_editing_assistant_name(null);
+      return;
+    }
+    const assistantNames = assistants.map((a) => typeof a === "string" ? a : a.name);
+    if (assistantNames.includes(newName)) {
+      show_feedback("هذا الاسم موجود مسبقاً.", "error");
+      return;
+    }
+    set_assistants((prev) => prev.map((a) => {
+      const aName = typeof a === "string" ? a : a.name;
+      if (aName === oldName) {
+        return typeof a === "string" ? newName : { ...a, name: newName };
+      }
+      return a;
+    }));
+    set_editing_assistant_name(null);
+    show_feedback("تم تعديل اسم المساعد بنجاح.", "success");
   };
   const handle_confirm_delete_assistant = () => {
     if (assistant_to_delete) {
@@ -496,13 +520,49 @@ const SettingsPage: React.FC<SettingsPageProps> = () => {
               return (
                 <li
                   key={name}
-                  className="flex justify-between p-2 bg-gray-50 border rounded"
+                  className="flex justify-between items-center p-2 bg-gray-50 border rounded"
                 >
-                  {name}
-                  {name !== "بدون تخصيص" && (
-                    <button onClick={() => handle_delete_assistant(name)}>
-                      <TrashIcon className="w-4 h-4 text-red-500" />
-                    </button>
+                  {editing_assistant_name === name ? (
+                    <div className="flex gap-2 w-full">
+                      <input
+                        type="text"
+                        value={edited_assistant_name}
+                        onChange={(e) => set_edited_assistant_name(e.target.value)}
+                        className="flex-grow p-1 border rounded"
+                      />
+                      <button
+                        onClick={() => handle_save_assistant_name(name)}
+                        className="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                      >
+                        حفظ
+                      </button>
+                      <button
+                        onClick={() => set_editing_assistant_name(null)}
+                        className="px-2 py-1 bg-gray-300 rounded hover:bg-gray-400"
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span>{name}</span>
+                      {name !== "بدون تخصيص" && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              set_editing_assistant_name(name);
+                              set_edited_assistant_name(name);
+                            }}
+                            title="تعديل المساعد"
+                          >
+                            <PencilIcon className="w-4 h-4 text-blue-500 hover:text-blue-600" />
+                          </button>
+                          <button onClick={() => handle_delete_assistant(name)} title="حذف المساعد">
+                            <TrashIcon className="w-4 h-4 text-red-500 hover:text-red-600" />
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </li>
               );
@@ -521,7 +581,7 @@ const SettingsPage: React.FC<SettingsPageProps> = () => {
             استعرض كافة النشاطات، تسجيلات الدخول، والتعديلات التي تمت على النظام من قبل المستخدمين والمساعدين مع الوقت والتاريخ.
           </p>
           <button
-            onClick={() => setShowActivityLogs(true)}
+            onClick={() => onNavigate && onNavigate("logs")}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
           >
             <ShieldCheckIcon className="w-5 h-5" />
@@ -587,10 +647,6 @@ const SettingsPage: React.FC<SettingsPageProps> = () => {
         <AssistantsManager
           onClose={() => set_is_assistants_manager_open(false)}
         />
-      )}
-      
-      {showActivityLogs && (
-        <ActivityLogsModal onClose={() => setShowActivityLogs(false)} />
       )}
     </div>
   );

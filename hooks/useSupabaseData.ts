@@ -347,13 +347,23 @@ export const useSupabaseData = (
     }
   }, [is_data_loading]);
 
-  const [admin_viewing_user_id, set_admin_viewing_user_id] = React.useState<
+  const [admin_viewing_user_id, set_admin_viewing_user_id_internal] = React.useState<
     string | null
   >(null);
 
+  const set_admin_viewing_user_id = React.useCallback(
+    (id: string | null) => {
+      if (id === null && admin_viewing_user_id !== null) {
+        set_is_data_loading(true); // Prevent race condition when leaving user view
+      }
+      set_admin_viewing_user_id_internal(id);
+    },
+    [admin_viewing_user_id],
+  );
+
   // Reset admin viewing mode when user changes (e.g. logout)
   React.useEffect(() => {
-    set_admin_viewing_user_id(null);
+    set_admin_viewing_user_id_internal(null);
   }, [user?.id]);
 
   // Check for updates by fetching version.json from server
@@ -1641,6 +1651,10 @@ export const useSupabaseData = (
       }
     },
     delete_client: (id: string) => {
+      const client = data.clients.find((c) => c.id === id);
+      if (client && user?.id) {
+        logActivity(user.id, "DELETE", "client", id, `حذف موكل: ${client.name}`);
+      }
       set_deleted_ids((prev) => ({ ...prev, clients: [...prev.clients, id] }));
       set_full_data((prev) => ({
         ...prev,
@@ -1648,6 +1662,11 @@ export const useSupabaseData = (
       }));
     },
     delete_case: (client_id: string, case_id: string) => {
+      const client = data.clients.find((c) => c.id === client_id);
+      const caseItem = client?.cases.find((cs) => cs.id === case_id);
+      if (caseItem && user?.id) {
+        logActivity(user.id, "DELETE", "case", case_id, `حذف قضية: ${caseItem.subject || case_id}`);
+      }
       set_deleted_ids((prev) => ({ ...prev, cases: [...prev.cases, case_id] }));
       set_full_data((prev) => ({
         ...prev,
@@ -1724,6 +1743,10 @@ export const useSupabaseData = (
       }));
     },
     delete_admin_task: (id: string) => {
+      const task = data.admin_tasks.find((t) => t.id === id);
+      if (task && user?.id) {
+        logActivity(user.id, "DELETE", "admin_task", id, `حذف مهمة: ${task.task}`);
+      }
       set_deleted_ids((prev) => ({
         ...prev,
         admin_tasks: [...prev.admin_tasks, id],
@@ -1734,6 +1757,10 @@ export const useSupabaseData = (
       }));
     },
     delete_appointment: (id: string) => {
+      const appt = data.appointments.find((a) => a.id === id);
+      if (appt && user?.id) {
+        logActivity(user.id, "DELETE", "appointment", id, `حذف موعد: ${appt.title}`);
+      }
       set_deleted_ids((prev) => ({
         ...prev,
         appointments: [...prev.appointments, id],
@@ -1744,6 +1771,16 @@ export const useSupabaseData = (
       }));
     },
     delete_accounting_entry: (id: string) => {
+      const entry = data.accounting_entries.find((e) => e.id === id);
+      if (entry && user?.id) {
+        logActivity(
+          user.id,
+          "DELETE",
+          "accounting_entry",
+          id,
+          `حذف قيد محاسبي: ${entry.description} (${entry.amount.toLocaleString()} ل.س)`,
+        );
+      }
       set_deleted_ids((prev) => ({
         ...prev,
         accounting_entries: [...prev.accounting_entries, id],
@@ -1754,6 +1791,10 @@ export const useSupabaseData = (
       }));
     },
     delete_invoice: (id: string) => {
+      const inv = data.invoices.find((i) => i.id === id);
+      if (inv && user?.id) {
+        logActivity(user.id, "DELETE", "invoice", id, `حذف فاتورة: ${inv.client_name} (${inv.id})`);
+      }
       set_deleted_ids((prev) => ({
         ...prev,
         invoices: [...prev.invoices, id],
@@ -1796,32 +1837,8 @@ export const useSupabaseData = (
     postpone_session,
     audit_logs: data.audit_logs || [],
     log_activity: async (action: string, entity_type: string, entity_id?: string, details?: string) => {
-      const new_log: AuditLogEntry = {
-        id: Math.random().toString(36).substring(2, 9),
-        user_id: user?.id || "",
-        action,
-        entity_type,
-        entity_id,
-        details: details || "",
-        created_at: new Date().toISOString(),
-      };
-      set_full_data((prev) => ({
-        ...prev,
-        audit_logs: [new_log, ...(prev.audit_logs || [])].slice(0, 200),
-      }));
-      try {
-        const supabase = get_supabase_client();
-        if (supabase) {
-          await supabase.from("audit_logs").insert([{
-            user_id: user?.id || null,
-            action,
-            entity_type,
-            entity_id: entity_id || null,
-            details: details || "",
-          }]);
-        }
-      } catch (err) {
-        // Table might not exist yet
+      if (user?.id) {
+        logActivity(user.id, action, entity_type, entity_id, details);
       }
     },
   };
