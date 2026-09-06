@@ -3,6 +3,7 @@ import DatePicker from "./DatePicker";
 import { AdminTask } from "../types";
 import { to_input_date_string, safe_revive_date } from "../utils/dateUtils";
 import { CameraIcon, PhotoIcon, TrashIcon } from "./icons";
+import { Mic, Square, Trash2, Play, Pause } from "lucide-react";
 
 interface AdminTaskModalProps {
   isOpen: boolean;
@@ -76,12 +77,17 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
     assignee: "بدون تخصيص",
     location: "",
     image_url: undefined as string | undefined,
+    audio_note: undefined as string | undefined,
     case_id: undefined as string | undefined,
   });
 
   const [isProcessingImage, setIsProcessingImage] = React.useState(false);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
   const galleryInputRef = React.useRef<HTMLInputElement>(null);
+
+  const [isRecording, setIsRecording] = React.useState(false);
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const audioChunksRef = React.useRef<Blob[]>([]);
 
   // Effect to reset and populate form state when the modal opens.
   React.useEffect(() => {
@@ -93,6 +99,7 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
         assignee: "بدون تخصيص",
         location: "",
         image_url: undefined as string | undefined,
+        audio_note: undefined as string | undefined,
         case_id: undefined as string | undefined,
       };
       set_task_form_data({
@@ -103,7 +110,9 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
           : defaultState.due_date,
         case_id: initialData?.case_id,
         image_url: initialData?.image_url,
+        audio_note: initialData?.audio_note,
       });
+      setIsRecording(false);
     }
   }, [isOpen, initialData]);
 
@@ -137,11 +146,56 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
     set_task_form_data((prev) => ({ ...prev, image_url: undefined }));
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          set_task_form_data((prev) => ({
+            ...prev,
+            audio_note: reader.result as string,
+          }));
+        };
+        reader.readAsDataURL(audioBlob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      alert("تعذر الوصول إلى الميكروفون. يرجى التحقق من الصلاحيات.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const removeAudio = () => {
+    set_task_form_data((prev) => ({ ...prev, audio_note: undefined }));
+  };
+
   const handle_task_submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const taskText = task_form_data.task.trim() || (task_form_data.image_url ? "صورة مرفقة" : "");
-    if (!taskText && !task_form_data.image_url) {
-      alert("يرجى إدخال وصف المهمة أو إرفاق صورة.");
+    const taskText = task_form_data.task.trim() || (task_form_data.image_url ? "صورة مرفقة" : task_form_data.audio_note ? "ملاحظة صوتية" : "");
+    if (!taskText && !task_form_data.image_url && !task_form_data.audio_note) {
+      alert("يرجى إدخال وصف المهمة أو إرفاق صورة أو تسجيل ملاحظة صوتية.");
       return;
     }
     if (!task_form_data.due_date) return;
@@ -156,6 +210,7 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
       due_date: to_input_date_string(taskDate),
       location: task_form_data.location || "غير محدد",
       image_url: task_form_data.image_url,
+      audio_note: task_form_data.audio_note,
     } as Omit<AdminTask, "completed"> & { id?: string });
   };
 
@@ -184,8 +239,8 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
               onChange={handle_task_form_change}
               className="w-full p-2 border rounded"
               rows={3}
-              placeholder={task_form_data.image_url ? "أدخل نص أو ملاحظات مع الصورة (اختياري)..." : "أدخل تفاصيل المهمة..."}
-              required={!task_form_data.image_url}
+              placeholder={task_form_data.image_url || task_form_data.audio_note ? "أدخل نص أو ملاحظات (اختياري)..." : "أدخل تفاصيل المهمة..."}
+              required={!task_form_data.image_url && !task_form_data.audio_note}
             />
           </div>
 
@@ -252,6 +307,49 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
             )}
             {isProcessingImage && (
               <p className="text-xs text-blue-600 mt-2 font-semibold">جاري معالجة الصورة...</p>
+            )}
+          </div>
+
+          {/* Audio Recording Section */}
+          <div className="border border-dashed border-gray-300 p-3 rounded-lg bg-gray-50">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              ملاحظة صوتية
+            </label>
+            {task_form_data.audio_note ? (
+              <div className="flex items-center gap-3 bg-white p-2 border rounded-lg shadow-sm">
+                <audio src={task_form_data.audio_note} controls className="h-10 w-full" />
+                <button
+                  type="button"
+                  onClick={removeAudio}
+                  className="bg-red-50 text-red-600 p-2 rounded-full hover:bg-red-100 transition-colors"
+                  title="حذف التسجيل"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                {!isRecording ? (
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    <Mic className="w-5 h-5" />
+                    <span>بدء التسجيل</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={stopRecording}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors animate-pulse"
+                  >
+                    <Square className="w-5 h-5" />
+                    <span>إيقاف التسجيل</span>
+                  </button>
+                )}
+                {isRecording && <span className="text-sm font-medium text-red-600">جاري التسجيل...</span>}
+              </div>
             )}
           </div>
 

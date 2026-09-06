@@ -1256,6 +1256,11 @@ const HomePage: React.FC<HomePageProps> = ({
               </span>
             </div>
           )}
+          {task.audio_note && (
+            <div className="mt-2 max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <audio src={task.audio_note} controls className="w-full h-10 border rounded-full bg-gray-50" />
+            </div>
+          )}
           {task.image_url && (
             <div className="mt-2">
               <img

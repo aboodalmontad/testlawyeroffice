@@ -794,6 +794,16 @@ export const upsert_data_to_supabase = async (
       }
     }
 
+    if (
+      (extractedFields.has("audio_note") || lowerMsg.includes("audio_note")) &&
+      cleaned.audio_note
+    ) {
+      let taskText = cleaned.task || "";
+      if (!taskText.includes("<!--AUDIO:")) {
+        cleaned.task = `${taskText}\n<!--AUDIO:${cleaned.audio_note}-->`;
+      }
+    }
+
     for (const key of Object.keys(cleaned)) {
       const keyLower = key.toLowerCase();
       const isMissingField =

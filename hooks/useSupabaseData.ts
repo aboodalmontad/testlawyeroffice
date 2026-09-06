@@ -109,13 +109,21 @@ const migrate_data = (old_data: any): AppData => {
     stages: (c.stages || []).map(migrate_stage),
     tasks: (c.tasks || []).map((t: any) => {
       let img = t.image_url || t.imageUrl;
+      let audioNote = t.audio_note;
       let cleanTask = t.task || "";
       if (!img && cleanTask.includes("<!--IMG:")) {
         const match = cleanTask.match(/<!--IMG:([\s\S]*?)-->/);
         if (match) img = match[1];
       }
+      if (!audioNote && cleanTask.includes("<!--AUDIO:")) {
+        const match = cleanTask.match(/<!--AUDIO:([\s\S]*?)-->/);
+        if (match) audioNote = match[1];
+      }
       if (cleanTask.includes("<!--IMG:")) {
         cleanTask = cleanTask.replace(/<!--IMG:[\s\S]*?-->/g, "").trim();
+      }
+      if (cleanTask.includes("<!--AUDIO:")) {
+        cleanTask = cleanTask.replace(/<!--AUDIO:[\s\S]*?-->/g, "").trim();
       }
       return {
         id: t.id,
@@ -125,6 +133,7 @@ const migrate_data = (old_data: any): AppData => {
         importance: t.importance || "normal",
         assignee: t.assignee,
         image_url: img,
+        audio_note: audioNote,
         updated_at: t.updated_at || t.updatedAt,
       };
     }),
@@ -146,13 +155,21 @@ const migrate_data = (old_data: any): AppData => {
 
   const migrate_task = (t: any): AdminTask => {
     let img = t.image_url || t.imageUrl;
+    let audioNote = t.audio_note;
     let cleanTask = t.task || "";
     if (!img && cleanTask.includes("<!--IMG:")) {
       const match = cleanTask.match(/<!--IMG:([\s\S]*?)-->/);
       if (match) img = match[1];
     }
+    if (!audioNote && cleanTask.includes("<!--AUDIO:")) {
+      const match = cleanTask.match(/<!--AUDIO:([\s\S]*?)-->/);
+      if (match) audioNote = match[1];
+    }
     if (cleanTask.includes("<!--IMG:")) {
       cleanTask = cleanTask.replace(/<!--IMG:[\s\S]*?-->/g, "").trim();
+    }
+    if (cleanTask.includes("<!--AUDIO:")) {
+      cleanTask = cleanTask.replace(/<!--AUDIO:[\s\S]*?-->/g, "").trim();
     }
     return {
       id: t.id,
@@ -164,6 +181,7 @@ const migrate_data = (old_data: any): AppData => {
       assignee: t.assignee,
       location: t.location,
       image_url: img,
+      audio_note: audioNote,
       case_id: t.case_id || t.caseId,
       updated_at: t.updated_at || t.updatedAt,
       order_index: t.order_index ?? t.orderIndex,

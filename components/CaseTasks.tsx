@@ -142,6 +142,11 @@ const CaseTasks: React.FC<CaseTasksProps> = ({ caseItem, clientName, onUpdateTas
                 <TrashIcon className="w-5 h-5 text-red-500" />
               </button>
             </div>
+            {task.audio_note && (
+              <div className="mr-7 max-w-sm">
+                <audio src={task.audio_note} controls className="w-full h-8 border rounded-full bg-gray-50" />
+              </div>
+            )}
             {task.image_url && (
               <div className="mr-7">
                 <img

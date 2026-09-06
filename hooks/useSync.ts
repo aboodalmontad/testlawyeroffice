@@ -90,6 +90,7 @@ const construct_data = (flat_data: Partial<FlatData>): AppData => {
         importance: t.importance || "normal",
         assignee: t.assignee,
         image_url: t.image_url,
+        audio_note: t.audio_note,
         updated_at: t.updated_at,
       }));
 
@@ -100,7 +101,12 @@ const construct_data = (flat_data: Partial<FlatData>): AppData => {
       task_map.set(
         t.id,
         existing
-          ? { ...existing, ...t, image_url: t.image_url || existing.image_url }
+          ? {
+              ...existing,
+              ...t,
+              image_url: t.image_url || existing.image_url,
+              audio_note: t.audio_note || existing.audio_note,
+            }
           : t,
       );
     });

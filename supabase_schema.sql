@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS public.admin_tasks (
     assignee TEXT,
     location TEXT,
     image_url TEXT,
+    audio_note TEXT,
     order_index INTEGER DEFAULT 0,
     user_id UUID REFERENCES auth.users NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW()
