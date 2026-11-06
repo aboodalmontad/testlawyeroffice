@@ -146,7 +146,7 @@ export interface CaseTask {
   importance: "normal" | "important" | "urgent";
   assignee?: string;
   image_url?: string;
-  audio_note?: string;
+  audio_url?: string;
   updated_at?: string;
 }
 
@@ -184,9 +184,10 @@ export interface AdminTask {
   location?: string;
   case_id?: string;
   image_url?: string;
-  audio_note?: string;
+  audio_url?: string;
   updated_at?: string;
   order_index?: number;
+  task_type?: "admin" | "office";
 }
 
 export interface Appointment {
@@ -285,6 +286,24 @@ export interface AuditLogEntry {
   created_at: string;
 }
 
+export interface VoiceTask {
+  id: string;
+  sender_id: string;
+  title?: string;
+  storage_path: string;
+  created_at: string;
+  local_state?: "synced" | "pending_download" | "downloading";
+}
+
+export interface VoiceTaskRecipient {
+  id: string;
+  voice_task_id: string;
+  recipient_id: string;
+  downloaded: boolean;
+  downloaded_at?: string;
+}
+
+
 export interface AppData {
   clients: Client[];
   admin_tasks: AdminTask[];
@@ -296,6 +315,8 @@ export interface AppData {
   profiles: Profile[];
   site_finances: SiteFinancialEntry[];
   audit_logs: AuditLogEntry[];
+  voice_tasks: VoiceTask[];
+  voice_task_recipients: VoiceTaskRecipient[];
 }
 
 export interface DeletedIds {

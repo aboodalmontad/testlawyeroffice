@@ -17,5 +17,6 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": ["node_modules", "dist", "28-11-2025-2-main"]
 }

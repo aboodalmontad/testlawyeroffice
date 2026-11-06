@@ -259,7 +259,7 @@ const App: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
   const data = useSupabaseData(session?.user ?? null, isAuthLoading);
 
   const handle_generate_agenda = (event: React.MouseEvent) => {
-    const pending_tasks = data.admin_tasks.filter((t) => !t.completed);
+    const pending_tasks = data.admin_tasks.filter((t) => !t.completed && (t.task_type || "admin") === "admin");
     const grouped_pending: Record<string, AdminTask[]> = pending_tasks.reduce(
       (acc, task) => {
         const location = task.location || "غير محدد";
@@ -660,8 +660,9 @@ const App: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
       />
     );
   if (
-    data.sync_status === "unconfigured" ||
-    data.sync_status === "uninitialized"
+    (data.sync_status === "unconfigured" ||
+      data.sync_status === "uninitialized") &&
+    data.is_local_empty
   )
     return (
       <ConfigurationModal onRetry={() => data.manual_sync({ force: true })} />
@@ -968,7 +969,7 @@ const App: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
           {currentPage === "accounting" && (
             <AccountingPage clear_initial_invoice_data={() => {}} />
           )}
-          {currentPage === "settings" && <SettingsPage onNavigate={(page) => setCurrentPage(page as Page)} />}
+          {currentPage === "settings" && <SettingsPage onNavigate={(page) => setCurrentPage(page as Page)} onLogout={handleLogout} />}
           {currentPage === "logs" && <ActivityLogsPage />}
           {currentPage === "admin-tasks" && (
             <HomePage
@@ -1030,6 +1031,25 @@ const App: React.FC<{ onRefresh: () => void }> = ({ onRefresh }) => {
                 ...prev,
                 newTaskObj,
               ]);
+
+              if ((taskData as any).is_voice_task && (taskData as any).audio_url) {
+                try {
+                  const recipientIds = data.profiles ? data.profiles.map((p: any) => p.id) : [];
+                  fetch((taskData as any).audio_url)
+                    .then((r) => r.blob())
+                    .then((blob) => {
+                      if (data.addVoiceTask) {
+                        data.addVoiceTask(blob, taskData.task || "مهمة صوتية", recipientIds).catch((err: any) => {
+                          console.warn("Notice: Cloud voice task upload:", err);
+                        });
+                      }
+                    })
+                    .catch((e) => console.warn("Notice: Audio blob conversion:", e));
+                } catch (e) {
+                  console.warn("Notice: Audio dispatch:", e);
+                }
+              }
+
               if ((taskData as any).case_id) {
                 data.set_clients((prev: any[]) =>
                   prev.map((client) => ({

@@ -3,7 +3,7 @@ import DatePicker from "./DatePicker";
 import { AdminTask } from "../types";
 import { to_input_date_string, safe_revive_date } from "../utils/dateUtils";
 import { CameraIcon, PhotoIcon, TrashIcon } from "./icons";
-import { Mic, Square, Trash2, Play, Pause } from "lucide-react";
+import AudioRecorder from "./AudioRecorder";
 
 interface AdminTaskModalProps {
   isOpen: boolean;
@@ -16,6 +16,7 @@ interface AdminTaskModalProps {
     id?: string;
     case_id?: string;
     image_url?: string;
+    task_type?: "admin" | "office";
   };
   assistants: (string | { name: string; user_id?: string })[];
 }
@@ -77,17 +78,16 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
     assignee: "بدون تخصيص",
     location: "",
     image_url: undefined as string | undefined,
-    audio_note: undefined as string | undefined,
+    audio_url: undefined as string | undefined,
     case_id: undefined as string | undefined,
+    task_type: "admin" as "admin" | "office",
+    is_voice_task: false,
   });
+  const [activeTab, setActiveTab] = React.useState<'text' | 'voice'>('text');
 
   const [isProcessingImage, setIsProcessingImage] = React.useState(false);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
   const galleryInputRef = React.useRef<HTMLInputElement>(null);
-
-  const [isRecording, setIsRecording] = React.useState(false);
-  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
-  const audioChunksRef = React.useRef<Blob[]>([]);
 
   // Effect to reset and populate form state when the modal opens.
   React.useEffect(() => {
@@ -99,9 +99,10 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
         assignee: "بدون تخصيص",
         location: "",
         image_url: undefined as string | undefined,
-        audio_note: undefined as string | undefined,
         case_id: undefined as string | undefined,
+        task_type: "admin" as "admin" | "office",
       };
+      const initialTaskType = initialData?.task_type || "admin";
       set_task_form_data({
         ...defaultState,
         ...initialData,
@@ -110,9 +111,12 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
           : defaultState.due_date,
         case_id: initialData?.case_id,
         image_url: initialData?.image_url,
-        audio_note: initialData?.audio_note,
+        audio_url: initialData?.audio_url,
+        task_type: initialTaskType,
+        location: initialData?.location || (initialTaskType === "office" ? "المكتب" : ""),
+        is_voice_task: !!initialData?.audio_url,
       });
-      setIsRecording(false);
+      setActiveTab(initialData?.audio_url ? 'voice' : 'text');
     }
   }, [isOpen, initialData]);
 
@@ -122,7 +126,13 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
     >,
   ) => {
     const { name, value } = e.target;
-    set_task_form_data((prev) => ({ ...prev, [name]: value }));
+    set_task_form_data((prev) => {
+      const updated = { ...prev, [name]: value };
+      if (name === "task_type" && value === "office" && (!prev.location || prev.location === "")) {
+        updated.location = "المكتب";
+      }
+      return updated;
+    });
   };
 
   const handle_image_select = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,56 +156,23 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
     set_task_form_data((prev) => ({ ...prev, image_url: undefined }));
   };
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          set_task_form_data((prev) => ({
-            ...prev,
-            audio_note: reader.result as string,
-          }));
-        };
-        reader.readAsDataURL(audioBlob);
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      alert("تعذر الوصول إلى الميكروفون. يرجى التحقق من الصلاحيات.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  const removeAudio = () => {
-    set_task_form_data((prev) => ({ ...prev, audio_note: undefined }));
+  const handle_audio_change = (newAudioUrl: string | undefined) => {
+    set_task_form_data((prev) => ({ ...prev, audio_url: newAudioUrl, is_voice_task: !!newAudioUrl }));
   };
 
   const handle_task_submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const taskText = task_form_data.task.trim() || (task_form_data.image_url ? "صورة مرفقة" : task_form_data.audio_note ? "ملاحظة صوتية" : "");
-    if (!taskText && !task_form_data.image_url && !task_form_data.audio_note) {
-      alert("يرجى إدخال وصف المهمة أو إرفاق صورة أو تسجيل ملاحظة صوتية.");
+    let taskText = task_form_data.task.trim();
+    if (!taskText) {
+      if (task_form_data.audio_url) {
+        taskText = "مهمة صوتية";
+      } else if (task_form_data.image_url) {
+        taskText = "صورة مرفقة";
+      }
+    }
+
+    if (!taskText && !task_form_data.image_url && !task_form_data.audio_url) {
+      alert("يرجى إدخال تفاصيل المهمة أو تسجيل ملاحظة صوتية أو إرفاق صورة.");
       return;
     }
     if (!task_form_data.due_date) return;
@@ -208,10 +185,11 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
       case_id: initialData?.case_id,
       id: initialData?.id,
       due_date: to_input_date_string(taskDate),
-      location: task_form_data.location || "غير محدد",
+      location: task_form_data.location || (task_form_data.task_type === "office" ? "المكتب" : "غير محدد"),
       image_url: task_form_data.image_url,
-      audio_note: task_form_data.audio_note,
-    } as Omit<AdminTask, "completed"> & { id?: string });
+      audio_url: task_form_data.audio_url,
+      is_voice_task: !!task_form_data.audio_url || activeTab === 'voice',
+    } as Omit<AdminTask, "completed"> & { id?: string; is_voice_task?: boolean });
   };
 
   if (!isOpen) return null;
@@ -229,20 +207,67 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
           {initialData?.id ? "تعديل مهمة" : "إضافة مهمة جديدة"}
         </h2>
         <form onSubmit={handle_task_submit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              المهمة / ملاحظات نصية
-            </label>
-            <textarea
-              name="task"
-              value={task_form_data.task || ""}
-              onChange={handle_task_form_change}
-              className="w-full p-2 border rounded"
-              rows={3}
-              placeholder={task_form_data.image_url || task_form_data.audio_note ? "أدخل نص أو ملاحظات (اختياري)..." : "أدخل تفاصيل المهمة..."}
-              required={!task_form_data.image_url && !task_form_data.audio_note}
-            />
+          <div className="flex border-b border-gray-200">
+            <button
+              type="button"
+              className={`flex-1 py-2 text-sm font-medium ${activeTab === 'text' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}
+              onClick={() => setActiveTab('text')}
+            >
+              مهمة نصية
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-2 text-sm font-medium ${activeTab === 'voice' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}
+              onClick={() => setActiveTab('voice')}
+            >
+              مهمة صوتية
+            </button>
           </div>
+
+          {activeTab === 'text' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                المهمة / ملاحظات نصية
+              </label>
+              <textarea
+                name="task"
+                value={task_form_data.task || ""}
+                onChange={handle_task_form_change}
+                className="w-full p-2 border rounded"
+                rows={3}
+                placeholder={task_form_data.image_url ? "أدخل نص أو ملاحظات مع الصورة (اختياري)..." : "أدخل تفاصيل المهمة..."}
+                required={!task_form_data.image_url && !task_form_data.audio_url}
+              />
+            </div>
+          )}
+
+          {activeTab === 'voice' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  عنوان أو وصف المهمة الصوتية (اختياري)
+                </label>
+                <input
+                  type="text"
+                  name="task"
+                  value={task_form_data.task || ""}
+                  onChange={handle_task_form_change}
+                  className="w-full p-2 border rounded text-sm"
+                  placeholder="مثال: تعليمات مراجعة ملف الدعوى (اختياري)..."
+                />
+              </div>
+
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  تسجيل الرسالة الصوتية
+                </label>
+                <AudioRecorder
+                  audioUrl={task_form_data.audio_url}
+                  onAudioChange={handle_audio_change}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Image Upload Section */}
           <div className="border border-dashed border-gray-300 p-3 rounded-lg bg-gray-50">
@@ -310,70 +335,29 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
             )}
           </div>
 
-          {/* Audio Recording Section */}
-          <div className="border border-dashed border-gray-300 p-3 rounded-lg bg-gray-50">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              ملاحظة صوتية
-            </label>
-            {task_form_data.audio_note ? (
-              <div className="flex items-center gap-3 bg-white p-2 border rounded-lg shadow-sm">
-                <audio src={task_form_data.audio_note} controls className="h-10 w-full" />
-                <button
-                  type="button"
-                  onClick={removeAudio}
-                  className="bg-red-50 text-red-600 p-2 rounded-full hover:bg-red-100 transition-colors"
-                  title="حذف التسجيل"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-4">
-                {!isRecording ? (
-                  <button
-                    type="button"
-                    onClick={startRecording}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    <Mic className="w-5 h-5" />
-                    <span>بدء التسجيل</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={stopRecording}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors animate-pulse"
-                  >
-                    <Square className="w-5 h-5" />
-                    <span>إيقاف التسجيل</span>
-                  </button>
-                )}
-                {isRecording && <span className="text-sm font-medium text-red-600">جاري التسجيل...</span>}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              المكان
-            </label>
-            <input
-              type="text"
-              name="location"
-              list="locations"
-              value={task_form_data.location || ""}
-              onChange={handle_task_form_change}
-              className="w-full p-2 border rounded"
-              placeholder="مثال: القصر العدلي"
-            />
-            <datalist id="locations">
-              <option value="القصر العدلي" />
-              <option value="المكتب" />
-              <option value="السجل العقاري" />
-              <option value="السجل المدني" />
-              <option value="المالية" />
-            </datalist>
-          </div>
+          {task_form_data.task_type !== "office" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                المكان
+              </label>
+              <input
+                type="text"
+                name="location"
+                list="locations"
+                value={task_form_data.location || ""}
+                onChange={handle_task_form_change}
+                className="w-full p-2 border rounded"
+                placeholder="مثال: القصر العدلي"
+              />
+              <datalist id="locations">
+                <option value="القصر العدلي" />
+                <option value="المكتب" />
+                <option value="السجل العقاري" />
+                <option value="السجل المدني" />
+                <option value="المالية" />
+              </datalist>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -409,7 +393,22 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              تخصيص لـ
+              نوع المهمة
+            </label>
+            <select
+              name="task_type"
+              value={task_form_data.task_type || "admin"}
+              onChange={handle_task_form_change}
+              className="w-full p-2 border rounded"
+              required
+            >
+              <option value="admin">مهمة إدارية عامة</option>
+              <option value="office">مهمة مكتب</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              تخصيص لـ (المستلم)
             </label>
             <select
               name="assignee"
@@ -417,6 +416,8 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
               onChange={handle_task_form_change}
               className="w-full p-2 border rounded"
             >
+              <option value="الجميع">جميع مستخدمي المكتب</option>
+              <option value="بدون تخصيص">بدون تخصيص</option>
               {assistants.map((assistant, index) => {
                 const name =
                   typeof assistant === "string" ? assistant : assistant.name;
@@ -428,6 +429,11 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
               })}
             </select>
           </div>
+          {activeTab === 'voice' && !task_form_data.audio_url && (
+            <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+              يرجى الضغط على زر التسجيل أو رفع ملف صوتي لتسجيل رسالتك أولاً ثم الضغط على إرسال.
+            </p>
+          )}
           <div className="mt-6 flex justify-end gap-4">
             <button
               type="button"
@@ -438,10 +444,10 @@ const AdminTaskModal: React.FC<AdminTaskModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isProcessingImage}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              disabled={isProcessingImage || (activeTab === 'voice' && !task_form_data.audio_url)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold"
             >
-              حفظ
+              {activeTab === 'voice' ? 'إرسال المهمة الصوتية' : 'حفظ المهمة'}
             </button>
           </div>
         </form>
