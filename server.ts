@@ -24,21 +24,32 @@ async function startServer() {
     console.log(`Proxying ${method || "GET"} request to: ${url}`);
 
     try {
-      const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || "";
+      const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2YWZkaHl1ZHZkeW1sZXRxamVlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTkzMDQ3NiwiZXhwIjoyMDc3NTA2NDc2fQ.y_D64FZILeOCFwAbZZaN0TqFVcpD3VSE9nJWPt_ypCc";
+
+      // Create a clean headers object without any existing apikey to ensure ours is used
+      const cleanHeaders = new Headers();
+      if (headers) {
+        for (const [key, value] of Object.entries(headers)) {
+          if (key.toLowerCase() !== 'apikey' && key.toLowerCase() !== 'authorization' && key.toLowerCase() !== 'host') {
+             cleanHeaders.set(key, value as string);
+          }
+        }
+      }
+      
+      cleanHeaders.set('apikey', supabaseKey);
+      cleanHeaders.set('Authorization', headers?.Authorization || `Bearer ${supabaseKey}`);
 
       const fetchOptions: RequestInit = {
         method: method || "GET",
-        headers: {
-          ...headers,
-          apikey: supabaseKey,
-          Authorization: headers?.Authorization || `Bearer ${supabaseKey}`,
-        },
+        headers: cleanHeaders,
       };
 
       if (body && method !== "GET" && method !== "HEAD") {
         fetchOptions.body =
           typeof body === "string" ? body : JSON.stringify(body);
       }
+
+      console.log("Sending proxy request headers:", fetchOptions.headers);
 
       const response = await fetch(url, fetchOptions);
 

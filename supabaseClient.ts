@@ -51,6 +51,47 @@ async function robustFetch(
     urlStr = String(input);
   }
 
+  // Intercept and use proxy if the URL matches the Supabase project
+  if (urlStr.startsWith(supabaseUrl)) {
+    try {
+      const originalMethod = fetchInit?.method || (typeof input === "object" && "method" in input ? (input as Request).method : "GET");
+      let originalHeaders: Record<string, string> = {};
+      if (fetchInit?.headers) {
+        if (fetchInit.headers instanceof Headers) {
+          originalHeaders = Object.fromEntries(fetchInit.headers.entries());
+        } else if (Array.isArray(fetchInit.headers)) {
+          originalHeaders = Object.fromEntries(fetchInit.headers);
+        } else {
+          originalHeaders = fetchInit.headers as Record<string, string>;
+        }
+      } else if (typeof input === "object" && "headers" in input && (input as Request).headers) {
+        originalHeaders = Object.fromEntries((input as Request).headers.entries());
+      }
+
+      let originalBody = fetchInit?.body;
+      
+      // Only proxy if there is no body, or if the body is a string (like JSON). 
+      // This avoids corrupting binary uploads (like File or FormData) by trying to serialize them.
+      if (!originalBody || typeof originalBody === "string") {
+        fetchInput = "/api/supabase";
+        fetchInit = {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: urlStr,
+            method: originalMethod,
+            headers: originalHeaders,
+            body: originalBody,
+          }),
+        };
+      }
+    } catch (e) {
+      console.error("Failed to intercept for proxy", e);
+    }
+  }
+
   const isAuthEndpoint = urlStr && urlStr.includes("/auth/v1/");
 
   try {

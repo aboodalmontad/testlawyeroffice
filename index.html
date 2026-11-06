@@ -116,7 +116,13 @@
         if (errEl) {
           const detail = document.createElement("p");
           detail.className = "text-xs text-red-500 mt-2 font-mono text-left break-all bg-red-50 p-2 rounded border border-red-100";
-          detail.textContent = String(e.reason || 'Unhandled Promise rejection');
+          let errStr = String(e.reason || 'Unhandled Promise rejection');
+          if (e.reason && e.reason.stack) {
+            errStr += '\n' + e.reason.stack;
+          } else if (e.reason && e.reason.message) {
+            errStr += '\n' + e.reason.message;
+          }
+          detail.textContent = errStr;
           errEl.appendChild(detail);
           const spinner = document.querySelector(".spinner");
           if (spinner) spinner.style.display = "none";
