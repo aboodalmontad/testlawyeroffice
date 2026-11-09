@@ -31,6 +31,8 @@ export type FlatData = {
   site_finances: SiteFinancialEntry[];
   audit_logs: AuditLogEntry[];
   sync_deletions: SyncDeletion[];
+  voice_tasks: any[];
+  voice_task_recipients: any[];
 };
 
 export const check_supabase_schema = async () => {

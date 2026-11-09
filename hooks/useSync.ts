@@ -527,6 +527,8 @@ export const use_sync = ({
       site_finances: data.site_finances,
       audit_logs: data.audit_logs || [],
       sync_deletions: [], // Local data doesn't track deletions this way
+      voice_tasks: data.voice_tasks || [],
+      voice_task_recipients: data.voice_task_recipients || [],
     };
   };
 
@@ -747,7 +749,8 @@ export const use_sync = ({
           local_flat_data.appointments.length === 0 &&
           local_flat_data.accounting_entries.length === 0 &&
           local_flat_data.invoices.length === 0 &&
-          local_flat_data.case_documents.length === 0;
+          local_flat_data.case_documents.length === 0 &&
+          local_flat_data.voice_tasks.length === 0;
         const has_pending_deletions = Object.values(
           deleted_ids_ref.current,
         ).some((arr: any) => arr.length > 0);
