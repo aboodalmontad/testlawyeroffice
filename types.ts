@@ -334,6 +334,8 @@ export interface DeletedIds {
   document_paths: string[];
   profiles: string[];
   site_finances: string[];
+  voice_tasks?: string[];
+  voice_task_recipients?: string[];
 }
 
 export interface SyncDeletion {
@@ -359,4 +361,6 @@ export const get_initial_deleted_ids = (): DeletedIds => ({
   document_paths: [],
   profiles: [],
   site_finances: [],
+  voice_tasks: [],
+  voice_task_recipients: [],
 });

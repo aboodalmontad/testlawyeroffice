@@ -1283,7 +1283,7 @@ const HomePage: React.FC<HomePageProps> = ({
               <p
                 className={`font-medium text-base whitespace-pre-wrap ${task.completed ? "line-through text-gray-500" : "text-gray-900"}`}
               >
-                {cleanTaskText}
+                {cleanTaskText || (taskAudio ? "مهمة صوتية" : "مهمة إدارية")}
               </p>
               {taskAudio && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">

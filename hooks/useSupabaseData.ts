@@ -127,6 +127,10 @@ const migrate_data = (old_data: any): AppData => {
       if (cleanTask.includes("<!--AUDIO:")) {
         cleanTask = cleanTask.replace(/<!--AUDIO:[\s\S]*?-->/g, "").trim();
       }
+      if (!cleanTask) {
+        if (audio) cleanTask = "مهمة صوتية";
+        else if (img) cleanTask = "مهمة مصورة";
+      }
       return {
         id: t.id,
         task: cleanTask,
@@ -172,6 +176,10 @@ const migrate_data = (old_data: any): AppData => {
     }
     if (cleanTask.includes("<!--AUDIO:")) {
       cleanTask = cleanTask.replace(/<!--AUDIO:[\s\S]*?-->/g, "").trim();
+    }
+    if (!cleanTask) {
+      if (audio) cleanTask = "مهمة صوتية";
+      else if (img) cleanTask = "مهمة مصورة";
     }
     return {
       id: t.id,
