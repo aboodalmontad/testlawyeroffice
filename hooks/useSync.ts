@@ -82,17 +82,36 @@ const construct_data = (flat_data: Partial<FlatData>): AppData => {
   (flat_data.cases || []).forEach((cs) => {
     const case_admin_tasks = (flat_data.admin_tasks || [])
       .filter((t: any) => t.case_id === cs.id)
-      .map((t: any) => ({
-        id: t.id,
-        task: t.task,
-        due_date: t.due_date,
-        completed: Boolean(t.completed),
-        importance: t.importance || "normal",
-        assignee: t.assignee,
-        image_url: t.image_url,
-        audio_url: t.audio_url,
-        updated_at: t.updated_at,
-      }));
+      .map((t: any) => {
+        let audio = t.audio_url;
+        let img = t.image_url;
+        let cleanTask = t.task || "";
+        if (!audio && cleanTask.includes("<!--AUDIO:")) {
+          const m = cleanTask.match(/<!--AUDIO:([\s\S]*?)-->/);
+          if (m) audio = m[1];
+        }
+        if (cleanTask.includes("<!--AUDIO:")) {
+          cleanTask = cleanTask.replace(/<!--AUDIO:[\s\S]*?-->/g, "").trim();
+        }
+        if (!img && cleanTask.includes("<!--IMG:")) {
+          const m = cleanTask.match(/<!--IMG:([\s\S]*?)-->/);
+          if (m) img = m[1];
+        }
+        if (cleanTask.includes("<!--IMG:")) {
+          cleanTask = cleanTask.replace(/<!--IMG:[\s\S]*?-->/g, "").trim();
+        }
+        return {
+          id: t.id,
+          task: cleanTask || (audio ? "مهمة صوتية" : (img ? "مهمة مصورة" : "مهمة إدارية")),
+          due_date: t.due_date,
+          completed: Boolean(t.completed),
+          importance: t.importance || "normal",
+          assignee: t.assignee,
+          image_url: img,
+          audio_url: audio,
+          updated_at: t.updated_at,
+        };
+      });
 
     const task_map = new Map<string, any>();
     (cs.tasks || []).forEach((t: any) => task_map.set(t.id, t));
@@ -137,7 +156,31 @@ const construct_data = (flat_data: Partial<FlatData>): AppData => {
     clients: (flat_data.clients || []).map(
       (c) => ({ ...c, cases: case_map.get(c.id) || [] }) as Client,
     ),
-    admin_tasks: (flat_data.admin_tasks || []).map((t: any) => ({ ...t, audio_url: t.audio_url })) as any,
+    admin_tasks: (flat_data.admin_tasks || []).map((t: any) => {
+      let audio = t.audio_url;
+      let img = t.image_url;
+      let cleanTask = t.task || "";
+      if (!audio && cleanTask.includes("<!--AUDIO:")) {
+        const m = cleanTask.match(/<!--AUDIO:([\s\S]*?)-->/);
+        if (m) audio = m[1];
+      }
+      if (cleanTask.includes("<!--AUDIO:")) {
+        cleanTask = cleanTask.replace(/<!--AUDIO:[\s\S]*?-->/g, "").trim();
+      }
+      if (!img && cleanTask.includes("<!--IMG:")) {
+        const m = cleanTask.match(/<!--IMG:([\s\S]*?)-->/);
+        if (m) img = m[1];
+      }
+      if (cleanTask.includes("<!--IMG:")) {
+        cleanTask = cleanTask.replace(/<!--IMG:[\s\S]*?-->/g, "").trim();
+      }
+      return {
+        ...t,
+        task: cleanTask || (audio ? "مهمة صوتية" : (img ? "مهمة مصورة" : "مهمة إدارية")),
+        audio_url: audio,
+        image_url: img,
+      };
+    }) as any,
     appointments: (flat_data.appointments || []) as any,
     accounting_entries: (flat_data.accounting_entries || []) as any,
     assistants: (flat_data.assistants || []).map((a) => {

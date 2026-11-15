@@ -677,6 +677,20 @@ export const delete_data_from_supabase = async (
   }
 };
 
+export const ensureVoiceTasksBucket = async (supabase: any) => {
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const exists = buckets?.some(
+      (b: any) => b.name === "voice_tasks" || b.id === "voice_tasks",
+    );
+    if (!exists) {
+      await supabase.storage.createBucket("voice_tasks", { public: true });
+    }
+  } catch (e) {
+    console.warn("Notice: ensureVoiceTasksBucket:", e);
+  }
+};
+
 export const upsert_data_to_supabase = async (
   data: Partial<FlatData>,
   user: User,
@@ -704,6 +718,40 @@ export const upsert_data_to_supabase = async (
   ];
   const is_admin_frontend =
     DESIGNATED_ADMIN_EMAILS.includes(user.email || "") || is_admin_user;
+
+  // Ensure public voice_tasks bucket exists in Supabase Storage
+  await ensureVoiceTasksBucket(supabase);
+
+  // Upload any local Base64 audio recordings to Supabase Storage before preparing payload
+  if (data.admin_tasks && data.admin_tasks.length > 0) {
+    for (let i = 0; i < data.admin_tasks.length; i++) {
+      const t = data.admin_tasks[i] as any;
+      if (
+        t.audio_url &&
+        typeof t.audio_url === "string" &&
+        t.audio_url.startsWith("data:audio/")
+      ) {
+        try {
+          const res = await fetch(t.audio_url);
+          const blob = await res.blob();
+          const fileName = `${user_id_to_use}/task_audio_${t.id}.webm`;
+          const { error: uploadErr } = await supabase.storage
+            .from("voice_tasks")
+            .upload(fileName, blob, { contentType: "audio/webm", upsert: true });
+          if (!uploadErr) {
+            const { data: pubData } = supabase.storage
+              .from("voice_tasks")
+              .getPublicUrl(fileName);
+            if (pubData?.publicUrl) {
+              t.audio_url = pubData.publicUrl;
+            }
+          }
+        } catch (e) {
+          console.warn("Could not upload task audio blob to storage, fallback to embedded:", e);
+        }
+      }
+    }
+  }
 
   const data_to_upsert = {
     clients: data.clients?.map((client) => ({
@@ -756,20 +804,39 @@ export const upsert_data_to_supabase = async (
     })),
     admin_tasks: data.admin_tasks?.map((task: any) => {
       let taskText = task.task || "";
+      let taskAudio = task.audio_url;
+      let taskImg = task.image_url;
+
+      // Extract existing embedded audio/img if present
+      if (!taskAudio && taskText.includes("<!--AUDIO:")) {
+        const m = taskText.match(/<!--AUDIO:([\s\S]*?)-->/);
+        if (m) taskAudio = m[1];
+      }
+      if (!taskImg && taskText.includes("<!--IMG:")) {
+        const m = taskText.match(/<!--IMG:([\s\S]*?)-->/);
+        if (m) taskImg = m[1];
+      }
+
+      // Strip existing tags to re-embed cleanly
       if (taskText.includes("<!--IMG:")) {
         taskText = taskText.replace(/<!--IMG:[\s\S]*?-->/g, "").trim();
       }
       if (taskText.includes("<!--AUDIO:")) {
         taskText = taskText.replace(/<!--AUDIO:[\s\S]*?-->/g, "").trim();
       }
-      if (task.audio_url && !taskText.includes("<!--AUDIO:")) {
-        if (task.audio_url.length < 500) {
-          taskText = `${taskText}\n<!--AUDIO:${task.audio_url}-->`;
-        }
+
+      // Always embed AUDIO and IMG tags into task text column
+      if (taskAudio) {
+        taskText = `${taskText}\n<!--AUDIO:${taskAudio}-->`;
       }
+      if (taskImg) {
+        taskText = `${taskText}\n<!--IMG:${taskImg}-->`;
+      }
+
       if (!taskText.trim()) {
-        taskText = task.audio_url ? "مهمة صوتية" : "مهمة إدارية";
+        taskText = taskAudio ? "مهمة صوتية" : (taskImg ? "مهمة مصورة" : "مهمة إدارية");
       }
+
       return {
         id: task.id,
         task: taskText,
@@ -778,8 +845,8 @@ export const upsert_data_to_supabase = async (
         importance: task.importance,
         assignee: task.assignee,
         location: task.location,
-        image_url: task.image_url,
-        audio_url: task.audio_url,
+        image_url: taskImg,
+        audio_url: taskAudio,
         updated_at: task.updated_at,
         order_index: task.order_index,
         task_type: task.task_type || "admin",
@@ -1129,38 +1196,38 @@ export const upsert_data_to_supabase = async (
     data_to_upsert.case_documents,
   );
 
-  // Upload any local Base64 task audio to Storage to avoid huge payload errors in Postgres
-  if (data_to_upsert.admin_tasks && data_to_upsert.admin_tasks.length > 0) {
-    for (let i = 0; i < data_to_upsert.admin_tasks.length; i++) {
-      const t = data_to_upsert.admin_tasks[i];
-      if (t.audio_url && typeof t.audio_url === "string" && t.audio_url.startsWith("data:audio/")) {
-        try {
-          const res = await fetch(t.audio_url);
-          const blob = await res.blob();
-          const fileName = `${user_id_to_use}/task_audio_${t.id}.webm`;
-          const { error: uploadErr } = await supabase.storage
-            .from("voice_tasks")
-            .upload(fileName, blob, { upsert: true });
-          if (!uploadErr) {
-            const { data: pubData } = supabase.storage
-              .from("voice_tasks")
-              .getPublicUrl(fileName);
-            if (pubData?.publicUrl) {
-              t.audio_url = pubData.publicUrl;
-            }
-          }
-        } catch (e) {
-          console.warn("Could not upload task audio blob to storage, using fallback:", e);
-        }
-      }
-    }
-  }
+  // Sanitize admin_tasks for Postgres schema (strip columns image_url, audio_url, case_id)
+  // because image and audio are safely embedded inside `task` text column as <!--IMG:...--> and <!--AUDIO:...-->
+  const admin_tasks_for_postgres = (data_to_upsert.admin_tasks || []).map((t: any) => {
+    const { image_url, audio_url, case_id, ...validCols } = t;
+    return validCols;
+  });
 
   // Sequentialize the rest to avoid lock stealing
-  results.admin_tasks = await upsert_table(
+  const upserted_admin_tasks = await upsert_table(
     "admin_tasks",
-    data_to_upsert.admin_tasks,
+    admin_tasks_for_postgres,
   );
+
+  // Re-attach audio_url and image_url extracted from task column so the local app state gets them
+  results.admin_tasks = (upserted_admin_tasks || []).map((t: any) => {
+    let img = undefined;
+    let audio = undefined;
+    let text = t.task || "";
+    if (text.includes("<!--IMG:")) {
+      const m = text.match(/<!--IMG:([\s\S]*?)-->/);
+      if (m) img = m[1];
+    }
+    if (text.includes("<!--AUDIO:")) {
+      const m = text.match(/<!--AUDIO:([\s\S]*?)-->/);
+      if (m) audio = m[1];
+    }
+    return {
+      ...t,
+      image_url: img,
+      audio_url: audio,
+    };
+  });
   results.appointments = await upsert_table(
     "appointments",
     data_to_upsert.appointments,
