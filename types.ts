@@ -121,6 +121,10 @@ export interface Session {
   stage_decision_date?: string;
   updated_at?: string;
   user_id?: string;
+  case_id?: string;
+  case_status?: "active" | "closed" | "on_hold";
+  case_subject?: string;
+  client_id?: string;
 }
 
 export interface Stage {
