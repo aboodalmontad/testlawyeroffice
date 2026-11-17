@@ -1,14 +1,12 @@
 // sw.js - Unified Service Worker for Offline-First Lawyer Management App
-const CACHE_NAME = "lawyer-app-cache-v2026-11-12";
+const CACHE_NAME = "lawyer-app-cache-v2026-11-17";
 
 // App Shell URLs to precache during Service Worker installation
 const urlsToCache = [
-  "./",
-  "./index.html",
-  "./index.css",
-  "./index.tsx",
-  "./manifest.json",
-  "./icon.svg",
+  "/",
+  "/index.html",
+  "/manifest.json",
+  "/icon.svg",
   "https://cdn.tailwindcss.com",
   "https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap"
 ];
@@ -108,7 +106,7 @@ self.addEventListener("fetch", (event) => {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(event.request, responseToCache);
-              cache.put("./index.html", responseToCache.clone());
+              cache.put("/index.html", responseToCache.clone());
             });
           }
           return response;
@@ -117,14 +115,11 @@ self.addEventListener("fetch", (event) => {
           console.log("Offline navigation fallback requested for:", event.request.url);
           const cached =
             (await caches.match(event.request)) ||
-            (await caches.match("./index.html")) ||
             (await caches.match("/index.html")) ||
-            (await caches.match("./")) ||
             (await caches.match("/"));
           
           if (cached) return cached;
 
-          // Search any matching cache key in CACHE_NAME ending with index.html or /
           try {
             const cache = await caches.open(CACHE_NAME);
             const keys = await cache.keys();
@@ -150,7 +145,6 @@ self.addEventListener("fetch", (event) => {
   // Static Assets & Code Modules: Stale-While-Revalidate / Cache-First when Offline
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      // If we are offline and have a cached copy, return it immediately
       if (cachedResponse && (typeof navigator !== "undefined" && !navigator.onLine)) {
         return cachedResponse;
       }
@@ -177,7 +171,6 @@ self.addEventListener("fetch", (event) => {
           const altMatch = await caches.match(url.pathname);
           if (altMatch) return altMatch;
 
-          // Safe fallback for stylesheets
           if (url.pathname.endsWith(".css")) {
             return new Response("", { headers: { "Content-Type": "text/css" } });
           }

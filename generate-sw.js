@@ -17,16 +17,14 @@ function getFiles(dir, fileList = []) {
     if (stat.isDirectory()) {
       getFiles(filePath, fileList);
     } else {
-      // Get relative path from dist/
       const relPath = path.relative(distDir, filePath).replace(/\\/g, '/');
-      // Exclude sw.js, map files, and system files
       if (
         relPath !== 'sw.js' &&
         !relPath.endsWith('.map') &&
         !relPath.startsWith('.') &&
         !relPath.includes('node_modules')
       ) {
-        fileList.push('./' + relPath);
+        fileList.push('/' + relPath);
       }
     }
   }
@@ -38,23 +36,20 @@ try {
     console.log('Generating dynamic Service Worker asset cache list...');
     const files = getFiles(distDir);
     
-    // Add essential fallback routes and CDNs
     const urlsToCache = [
-      './',
-      './index.html',
-      './manifest.json',
-      './icon.svg',
+      '/',
+      '/index.html',
+      '/manifest.json',
+      '/icon.svg',
       'https://cdn.tailwindcss.com',
       'https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap',
       ...files
     ];
     
-    // De-duplicate and filter empty items
     const uniqueUrls = [...new Set(urlsToCache)].filter(Boolean);
     
     let swContent = fs.readFileSync(swPath, 'utf8');
     
-    // Replace the urlsToCache array placeholder
     const arrayRegex = /const\s+urlsToCache\s*=\s*\[[\s\S]*?\];/;
     const replacement = `const urlsToCache = ${JSON.stringify(uniqueUrls, null, 2)};`;
     
