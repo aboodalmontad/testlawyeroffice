@@ -13,7 +13,6 @@ import SubscriptionExpiredPage from "./pages/SubscriptionExpiredPage";
 
 import ConfigurationModal from "./components/ConfigurationModal";
 import Logo from "./components/Logo";
-import { PWAInstallButton } from "./components/PWAInstallButton";
 import { useSupabaseData, SyncStatus } from "./hooks/useSupabaseData";
 import {
   UserIcon,
@@ -138,7 +137,6 @@ const Navbar: React.FC<NavbarProps> = ({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <PWAInstallButton />
         <button
           onClick={on_generate_agenda}
           className="p-2 rounded-full text-indigo-600 hover:bg-indigo-50"
