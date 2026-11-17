@@ -2387,8 +2387,42 @@ const HomePage: React.FC<HomePageProps> = ({
             className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg mt-10"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-xl font-bold mb-4">تعديل الجلسة</h2>
+             <h2 className="text-xl font-bold mb-4">تعديل الجلسة (جميع البيانات)</h2>
             <form onSubmit={handle_submit_session_edit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  اسم الموكل
+                </label>
+                <input
+                  type="text"
+                  value={session_form_data.client_name || ""}
+                  onChange={(e) =>
+                    set_session_form_data((p: any) => ({
+                      ...p,
+                      client_name: e.target.value,
+                    }))
+                  }
+                  className="w-full p-2 border rounded mt-1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  اسم الخصم
+                </label>
+                <input
+                  type="text"
+                  value={session_form_data.opponent_name || ""}
+                  onChange={(e) =>
+                    set_session_form_data((p: any) => ({
+                      ...p,
+                      opponent_name: e.target.value,
+                    }))
+                  }
+                  className="w-full p-2 border rounded mt-1"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700">
                   المحكمة
@@ -2408,7 +2442,7 @@ const HomePage: React.FC<HomePageProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  رقم الدعوى
+                  رقم الدعوى / الأساس
                 </label>
                 <input
                   type="text"
@@ -2477,6 +2511,40 @@ const HomePage: React.FC<HomePageProps> = ({
                     set_session_form_data((p: any) => ({
                       ...p,
                       postponement_reason: e.target.value,
+                    }))
+                  }
+                  className="w-full p-2 border rounded mt-1"
+                  rows={2}
+                ></textarea>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  تاريخ الجلسة القادمة
+                </label>
+                <div className="mt-1">
+                  <DatePicker
+                    value={session_form_data.next_session_date || ""}
+                    onChange={(date) =>
+                      set_session_form_data((p: any) => ({
+                        ...p,
+                        next_session_date: date,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  سبب التأجيل القادم
+                </label>
+                <textarea
+                  value={session_form_data.next_postponement_reason || ""}
+                  onChange={(e) =>
+                    set_session_form_data((p: any) => ({
+                      ...p,
+                      next_postponement_reason: e.target.value,
                     }))
                   }
                   className="w-full p-2 border rounded mt-1"

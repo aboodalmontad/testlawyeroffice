@@ -57,13 +57,6 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
     Record<string, { date: string; reason: string }>
   >({});
   const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const [editingCell, setEditingCell] = React.useState<{
-    sessionId: string;
-    field: keyof Session;
-  } | null>(null);
-  const [edit_value, set_edit_value] = React.useState<
-    string | number | undefined
-  >("");
   const longPressTimer = React.useRef<number | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent, session: Session) => {
@@ -112,7 +105,6 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
         [field]: value,
       },
     }));
-    // Clear error when user edits fields
     if (errors[sessionId]) {
       setErrors((prev) => {
         const newErrors = { ...prev };
@@ -213,42 +205,6 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
     }
   };
 
-  const handleCellClick = (session: Session, field: keyof Session) => {
-    if (!onUpdate) return;
-    const value = session[field];
-    if (typeof value === "boolean") {
-      return;
-    }
-    setEditingCell({ sessionId: session.id, field });
-    set_edit_value(value);
-  };
-
-  const handleSaveEdit = () => {
-    if (!editingCell || !onUpdate) return;
-
-    const currentSession = sessions.find((s) => s.id === editingCell.sessionId);
-    if (currentSession && currentSession[editingCell.field] !== edit_value) {
-      onUpdate(editingCell.sessionId, { [editingCell.field]: edit_value });
-    }
-
-    setEditingCell(null);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingCell(null);
-  };
-
-  const handleInputKeyDown = (
-    e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleSaveEdit();
-    } else if (e.key === "Escape") {
-      handleCancelEdit();
-    }
-  };
-
   if (sessions.length === 0) {
     return (
       <p className="p-4 text-gray-500 text-center">لا توجد جلسات لعرضها.</p>
@@ -269,7 +225,6 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
             <th className="px-2 sm:px-6 py-3">الخصم</th>
             <th className="px-2 sm:px-6 py-3">المكلف بالحضور</th>
             <th className="px-2 sm:px-6 py-3">سبب التأجيل</th>
-            {/* Only show these headers if postponement is allowed/possible in general */}
             <th className="px-2 sm:px-6 py-3 min-w-[170px] no-print">
               تاريخ الجلسة القادمة
             </th>
@@ -304,24 +259,12 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
               !isStageDecided &&
               !isCaseOnHold;
 
-            // IMPORTANT: Only show postponement fields if onPostpone is provided AND not on hold AND other conditions met
             const showPostponeFields =
               !!onPostpone &&
               !isEffectivelyPostponed &&
               !isStageDecided &&
               !isCaseOnHold &&
               (!is_before_today(s.date) || allowPostponingPastSessions);
-            const isEditing = (field: keyof Session) =>
-              onUpdate &&
-              editingCell?.sessionId === s.id &&
-              editingCell?.field === field;
-            const cellClasses = onUpdate
-              ? "cursor-pointer hover:bg-blue-50 transition-colors duration-150"
-              : "";
-            const nextReasonCellClasses =
-              onUpdate && isEffectivelyPostponed
-                ? "cursor-pointer hover:bg-blue-50 transition-colors duration-150"
-                : "";
 
             return (
               <tr
@@ -330,47 +273,28 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
                 onTouchStart={(e) => handleTouchStart(e, s)}
                 onTouchEnd={handleTouchEnd}
                 onTouchMove={handleTouchEnd}
-                onDoubleClick={() => onNavigateToCase && onNavigateToCase(s)}
-                title="اضغط مرتين للانتقال إلى القضية مباشرة"
-                className={`bg-white border-b hover:bg-gray-50 cursor-pointer ${editingCell?.sessionId === s.id ? "bg-blue-50" : ""} ${isCaseOnHold ? "bg-amber-50/40" : ""} ${isOverdue ? "bg-red-50/50" : ""} ${isTodaySession ? "bg-orange-50/60" : ""}`}
+                className={`bg-white border-b hover:bg-gray-50 ${isCaseOnHold ? "bg-amber-50/40" : ""} ${isOverdue ? "bg-red-50/50" : ""} ${isTodaySession ? "bg-orange-50/60" : ""}`}
               >
-                <td
-                  className={`px-2 sm:px-6 py-4 ${cellClasses}`}
-                  onClick={() =>
-                    !isEditing("court") && handleCellClick(s, "court")
-                  }
-                >
+                <td className="px-2 sm:px-6 py-4">
                   <div className="flex flex-col gap-1">
-                    {isEditing("court") ? (
-                      <input
-                        type="text"
-                        value={edit_value || ""}
-                        onChange={(e) => set_edit_value(e.target.value)}
-                        onBlur={handleSaveEdit}
-                        onKeyDown={handleInputKeyDown}
-                        className="p-1 border rounded bg-white w-full"
-                        autoFocus
-                      />
-                    ) : (
-                      <div className="flex items-center justify-between gap-1.5">
-                        <span>{s.court}</span>
-                        {onNavigateToCase && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onNavigateToCase(s);
-                            }}
-                            onTouchStart={(e) => e.stopPropagation()}
-                            className="inline-flex items-center justify-center p-1 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 rounded-md transition-colors flex-shrink-0 no-print"
-                            title="الانتقال إلى تفاصيل القضية"
-                            aria-label="الانتقال إلى تفاصيل القضية"
-                          >
-                            <FolderOpenIcon className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="font-medium">{s.court}</span>
+                      {onNavigateToCase && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNavigateToCase(s);
+                          }}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          className="inline-flex items-center justify-center p-1 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 rounded-md transition-colors flex-shrink-0 no-print"
+                          title="الانتقال إلى تفاصيل القضية"
+                          aria-label="الانتقال إلى تفاصيل القضية"
+                        >
+                          <FolderOpenIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-1">
                       {isCaseOnHold && (
                         <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] rounded-md font-bold">
@@ -405,144 +329,24 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
                     </div>
                   </div>
                 </td>
-                <td
-                  className={`px-2 sm:px-6 py-4 ${cellClasses}`}
-                  onClick={() =>
-                    !isEditing("case_number") &&
-                    handleCellClick(s, "case_number")
-                  }
-                >
-                  {isEditing("case_number") ? (
-                    <input
-                      type="text"
-                      value={edit_value || ""}
-                      onChange={(e) => set_edit_value(e.target.value)}
-                      onBlur={handleSaveEdit}
-                      onKeyDown={handleInputKeyDown}
-                      className="p-1 border rounded bg-white w-full"
-                      autoFocus
-                    />
-                  ) : (
-                    <span
-                      className={
-                        isEffectivelyPostponed
-                          ? "text-emerald-600 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md inline-block"
-                          : ""
-                      }
-                    >
-                      {s.case_number}
-                    </span>
-                  )}
-                </td>
-                {showSessionDate && (
-                  <td
-                    className={`px-2 sm:px-6 py-4 ${cellClasses}`}
-                    onClick={() =>
-                      !isEditing("date") && handleCellClick(s, "date")
+                <td className="px-2 sm:px-6 py-4">
+                  <span
+                    className={
+                      isEffectivelyPostponed
+                        ? "text-emerald-600 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md inline-block"
+                        : ""
                     }
                   >
-                    {isEditing("date") ? (
-                      <DatePicker
-                        value={edit_value as string}
-                        onChange={(date) => {
-                          onUpdate && onUpdate(s.id, { date: date });
-                          setEditingCell(null);
-                        }}
-                      />
-                    ) : (
-                      format_date(s.date)
-                    )}
-                  </td>
+                    {s.case_number}
+                  </span>
+                </td>
+                {showSessionDate && (
+                  <td className="px-2 sm:px-6 py-4">{format_date(s.date)}</td>
                 )}
-                <td
-                  className={`px-2 sm:px-6 py-4 ${cellClasses}`}
-                  onClick={() =>
-                    !isEditing("client_name") &&
-                    handleCellClick(s, "client_name")
-                  }
-                >
-                  {isEditing("client_name") ? (
-                    <input
-                      type="text"
-                      value={edit_value || ""}
-                      onChange={(e) => set_edit_value(e.target.value)}
-                      onBlur={handleSaveEdit}
-                      onKeyDown={handleInputKeyDown}
-                      className="p-1 border rounded bg-white w-full"
-                      autoFocus
-                    />
-                  ) : (
-                    s.client_name
-                  )}
-                </td>
-                <td
-                  className={`px-2 sm:px-6 py-4 ${cellClasses}`}
-                  onClick={() =>
-                    !isEditing("opponent_name") &&
-                    handleCellClick(s, "opponent_name")
-                  }
-                >
-                  {isEditing("opponent_name") ? (
-                    <input
-                      type="text"
-                      value={edit_value || ""}
-                      onChange={(e) => set_edit_value(e.target.value)}
-                      onBlur={handleSaveEdit}
-                      onKeyDown={handleInputKeyDown}
-                      className="p-1 border rounded bg-white w-full"
-                      autoFocus
-                    />
-                  ) : (
-                    s.opponent_name
-                  )}
-                </td>
-                <td
-                  className={`px-2 sm:px-6 py-4 ${cellClasses}`}
-                  onClick={() =>
-                    !isEditing("assignee") && handleCellClick(s, "assignee")
-                  }
-                >
-                  {isEditing("assignee") ? (
-                    <select
-                      value={edit_value || "بدون تخصيص"}
-                      onChange={(e) => set_edit_value(e.target.value)}
-                      onBlur={handleSaveEdit}
-                      onKeyDown={handleInputKeyDown}
-                      className="p-1 border rounded bg-white w-full"
-                      autoFocus
-                    >
-                      {assistants?.map((a, index) => (
-                        <option key={`${a}-${index}`} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    s.assignee || "-"
-                  )}
-                </td>
-                <td
-                  className={`px-2 sm:px-6 py-4 ${isStageDecided ? "" : cellClasses}`}
-                  onClick={() =>
-                    !isEditing("postponement_reason") &&
-                    !isStageDecided &&
-                    handleCellClick(s, "postponement_reason")
-                  }
-                >
-                  {isEditing("postponement_reason") && !isStageDecided ? (
-                    <input
-                      type="text"
-                      value={edit_value || ""}
-                      onChange={(e) => set_edit_value(e.target.value)}
-                      onBlur={handleSaveEdit}
-                      onKeyDown={handleInputKeyDown}
-                      className="p-1 border rounded bg-white w-full"
-                      autoFocus
-                    />
-                  ) : (
-                    s.postponement_reason || "لا يوجد"
-                  )}
-                </td>
+                <td className="px-2 sm:px-6 py-4">{s.client_name}</td>
+                <td className="px-2 sm:px-6 py-4">{s.opponent_name}</td>
+                <td className="px-2 sm:px-6 py-4">{s.assignee || "-"}</td>
+                <td className="px-2 sm:px-6 py-4">{s.postponement_reason || "لا يوجد"}</td>
 
                 {showPostponeFields ? (
                   <>
@@ -600,7 +404,7 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
                             <button
                               onClick={() => onToggleCaseHold(s)}
                               className="px-2.5 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-300 font-semibold rounded-lg transition-colors flex items-center gap-1"
-                              title="وقف المتابعة للقضية (اعتبار القضية غير متابعة ولا حاجة لترحيلها)"
+                              title="وقف المتابعة للقضية"
                             >
                               <PauseCircleIcon className="w-4 h-4 text-amber-600" />
                               <span className="text-xs">وقف المتابعة</span>
@@ -660,9 +464,7 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
                   </>
                 ) : (
                   <>
-                    <td
-                      className={`px-2 sm:px-6 py-4 text-center no-print ${nextReasonCellClasses}`}
-                    >
+                    <td className="px-2 sm:px-6 py-4 text-center no-print">
                       {isCaseOnHold ? (
                         <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-xs inline-flex items-center gap-1">
                           <PauseCircleIcon className="w-3.5 h-3.5 text-amber-600" />
@@ -676,26 +478,9 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
                         "-"
                       )}
                     </td>
-                    <td
-                      className={`px-2 sm:px-6 py-4 no-print ${nextReasonCellClasses}`}
-                      onClick={() =>
-                        !isEditing("next_postponement_reason") &&
-                        isEffectivelyPostponed &&
-                        handleCellClick(s, "next_postponement_reason")
-                      }
-                    >
+                    <td className="px-2 sm:px-6 py-4 no-print">
                       {isCaseOnHold ? (
                         <span className="text-xs text-amber-700 font-medium">موقوفة المتابعة (لا حاجة لترحيلها)</span>
-                      ) : isEditing("next_postponement_reason") ? (
-                        <input
-                          type="text"
-                          value={edit_value || ""}
-                          onChange={(e) => set_edit_value(e.target.value)}
-                          onBlur={handleSaveEdit}
-                          onKeyDown={handleInputKeyDown}
-                          className="p-1 border rounded bg-white w-full"
-                          autoFocus
-                        />
                       ) : (
                         s.next_postponement_reason || "-"
                       )}
