@@ -277,24 +277,7 @@ const SessionsTable: React.FC<SessionsTableProps> = ({
               >
                 <td className="px-2 sm:px-6 py-4">
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <span className="font-medium">{s.court}</span>
-                      {onNavigateToCase && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onNavigateToCase(s);
-                          }}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          className="inline-flex items-center justify-center p-1 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 rounded-md transition-colors flex-shrink-0 no-print"
-                          title="الانتقال إلى تفاصيل القضية"
-                          aria-label="الانتقال إلى تفاصيل القضية"
-                        >
-                          <FolderOpenIcon className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                    <span className="font-medium">{s.court}</span>
                     <div className="flex flex-wrap gap-1">
                       {isCaseOnHold && (
                         <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] rounded-md font-bold">
