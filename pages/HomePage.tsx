@@ -796,6 +796,27 @@ const HomePage: React.FC<HomePageProps> = ({
     set_drag_over_location(null);
   };
 
+  const handle_main_tab_drop = (targetType: "admin" | "office") => {
+    const currentDraggedId = dragged_task_id.current;
+    if (!currentDraggedId) return;
+
+    set_admin_tasks((currentTasks) => {
+      const updatedTasks = currentTasks.map((t) => ({ ...t }));
+      const draggedTask = updatedTasks.find((t) => t.id === currentDraggedId);
+      if (!draggedTask) return currentTasks;
+
+      draggedTask.task_type = targetType;
+      draggedTask.updated_at = new Date().toISOString();
+      return updatedTasks;
+    });
+
+    if (targetType === "office") {
+      set_active_task_tab("office_pending");
+    } else {
+      set_active_task_tab("pending");
+    }
+  };
+
   const handle_task_drop = (
     targetTaskId: string | null,
     targetLocation: string,
@@ -1793,6 +1814,16 @@ const HomePage: React.FC<HomePageProps> = ({
                <div className="inline-flex p-1.5 bg-gray-100 rounded-xl gap-2 shadow-inner">
                  <button
                    onClick={() => set_active_task_tab("pending")}
+                   onDragOver={(e) => {
+                     if (dragged_task_id.current) e.preventDefault();
+                   }}
+                   onDrop={(e) => {
+                     if (dragged_task_id.current) {
+                       e.preventDefault();
+                       e.stopPropagation();
+                       handle_main_tab_drop("admin");
+                     }
+                   }}
                    className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all duration-200 ${
                      !active_task_tab.startsWith("office")
                        ? "bg-blue-600 text-white shadow-md shadow-blue-500/25"
@@ -1803,6 +1834,16 @@ const HomePage: React.FC<HomePageProps> = ({
                  </button>
                  <button
                    onClick={() => set_active_task_tab("office_pending")}
+                   onDragOver={(e) => {
+                     if (dragged_task_id.current) e.preventDefault();
+                   }}
+                   onDrop={(e) => {
+                     if (dragged_task_id.current) {
+                       e.preventDefault();
+                       e.stopPropagation();
+                       handle_main_tab_drop("office");
+                     }
+                   }}
                    className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-sm transition-all duration-200 ${
                      active_task_tab.startsWith("office")
                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/25"
